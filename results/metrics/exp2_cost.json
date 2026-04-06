@@ -1,0 +1,606 @@
+{
+  "5": {
+    "uniform_50": {
+      "n_points": 5000,
+      "method": "uniform",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.10167346335947514,
+          "forward_std": 0.003371233646724402,
+          "backward_ms": 0.3442546585574746,
+          "backward_std": 0.006225386585660219,
+          "total_ms": 0.44592812191694975,
+          "time_per_sample_ms": 0.44592812191694975
+        },
+        "8": {
+          "forward_ms": 0.2074904468220969,
+          "forward_std": 0.01198830490338964,
+          "backward_ms": 0.5830710443357626,
+          "backward_std": 0.01572668661014479,
+          "total_ms": 0.7905614911578596,
+          "time_per_sample_ms": 0.09882018639473245
+        },
+        "32": {
+          "forward_ms": 0.37557171114409965,
+          "forward_std": 0.00817030923896269,
+          "backward_ms": 0.9453223009283344,
+          "backward_std": 0.03064435407201309,
+          "total_ms": 1.320894012072434,
+          "time_per_sample_ms": 0.04127793787726356
+        }
+      }
+    },
+    "uniform_100": {
+      "n_points": 20000,
+      "method": "uniform",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.23231840071578821,
+          "forward_std": 0.007194007517006678,
+          "backward_ms": 0.6162516384695967,
+          "backward_std": 0.0312719362210552,
+          "total_ms": 0.848570039185385,
+          "time_per_sample_ms": 0.848570039185385
+        },
+        "8": {
+          "forward_ms": 0.5441635109794637,
+          "forward_std": 0.023444742493380796,
+          "backward_ms": 1.1730296614890297,
+          "backward_std": 0.04853337931563717,
+          "total_ms": 1.7171931724684932,
+          "time_per_sample_ms": 0.21464914655856165
+        },
+        "32": {
+          "forward_ms": 1.3116924053368468,
+          "forward_std": 0.12122357695921987,
+          "backward_ms": 2.705198926075051,
+          "backward_std": 0.07701766799123685,
+          "total_ms": 4.016891331411898,
+          "time_per_sample_ms": 0.12552785410662182
+        }
+      }
+    },
+    "uniform_150": {
+      "n_points": 45000,
+      "method": "uniform",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.475534094342341,
+          "forward_std": 0.0074831347456860275,
+          "backward_ms": 1.0900334765513737,
+          "backward_std": 0.043119921030069334,
+          "total_ms": 1.5655675708937147,
+          "time_per_sample_ms": 1.5655675708937147
+        },
+        "8": {
+          "forward_ms": 1.064624839151899,
+          "forward_std": 0.053729204929352466,
+          "backward_ms": 2.3270903698479137,
+          "backward_std": 0.07616446071522433,
+          "total_ms": 3.3917152089998126,
+          "time_per_sample_ms": 0.4239644011249766
+        },
+        "32": {
+          "forward_ms": 2.8604727898103497,
+          "forward_std": 0.14618897770973932,
+          "backward_ms": 6.1165234733683365,
+          "backward_std": 0.37399097448975926,
+          "total_ms": 8.976996263178686,
+          "time_per_sample_ms": 0.28053113322433393
+        }
+      }
+    },
+    "uniform_200": {
+      "n_points": 80000,
+      "method": "uniform",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.956605999575307,
+          "forward_std": 0.10718499870891919,
+          "backward_ms": 2.1448402549140155,
+          "backward_std": 0.17718552081236988,
+          "total_ms": 3.1014462544893227,
+          "time_per_sample_ms": 3.1014462544893227
+        },
+        "8": {
+          "forward_ms": 2.18283305875957,
+          "forward_std": 0.16184756950918017,
+          "backward_ms": 4.811496660113335,
+          "backward_std": 0.3147497981538662,
+          "total_ms": 6.994329718872905,
+          "time_per_sample_ms": 0.8742912148591131
+        },
+        "32": {
+          "forward_ms": 6.220828586568435,
+          "forward_std": 0.6024063511572695,
+          "backward_ms": 13.006618630606681,
+          "backward_std": 1.085178990636008,
+          "total_ms": 19.227447217175115,
+          "time_per_sample_ms": 0.6008577255367223
+        }
+      }
+    },
+    "gauss_legendre": {
+      "n_points": 72,
+      "method": "gauss_legendre",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.05281962609539429,
+          "forward_std": 0.0038354463406925316,
+          "backward_ms": 0.24638506583869457,
+          "backward_std": 0.005050869748946883,
+          "total_ms": 0.2992046919340889,
+          "time_per_sample_ms": 0.2992046919340889
+        },
+        "8": {
+          "forward_ms": 0.07314087124541402,
+          "forward_std": 0.003801006281909759,
+          "backward_ms": 0.28900350832069915,
+          "backward_std": 0.004858861174993332,
+          "total_ms": 0.3621443795661132,
+          "time_per_sample_ms": 0.04526804744576415
+        },
+        "32": {
+          "forward_ms": 0.0790080870501697,
+          "forward_std": 0.0033547321869865174,
+          "backward_ms": 0.3022274235263467,
+          "backward_std": 0.009066990160571425,
+          "total_ms": 0.3812355105765164,
+          "time_per_sample_ms": 0.011913609705516137
+        }
+      }
+    },
+    "lebedev_11": {
+      "n_points": 50,
+      "method": "lebedev",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.05246668976421157,
+          "forward_std": 0.0031744178013388964,
+          "backward_ms": 0.2535515930503607,
+          "backward_std": 0.02084410404548293,
+          "total_ms": 0.3060182828145723,
+          "time_per_sample_ms": 0.3060182828145723
+        },
+        "8": {
+          "forward_ms": 0.07335045762980978,
+          "forward_std": 0.00424189859167054,
+          "backward_ms": 0.2891221083700657,
+          "backward_std": 0.007005954153206875,
+          "total_ms": 0.3624725659998755,
+          "time_per_sample_ms": 0.045309070749984436
+        },
+        "32": {
+          "forward_ms": 0.07697226634869973,
+          "forward_std": 0.004253670377627488,
+          "backward_ms": 0.2972458101188143,
+          "backward_std": 0.01304580919867564,
+          "total_ms": 0.37421807646751404,
+          "time_per_sample_ms": 0.011694314889609814
+        }
+      }
+    },
+    "lebedev_15": {
+      "n_points": 86,
+      "method": "lebedev",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.053552965012689434,
+          "forward_std": 0.0019227083407915345,
+          "backward_ms": 0.24954301382725438,
+          "backward_std": 0.011288378555406655,
+          "total_ms": 0.3030959788399438,
+          "time_per_sample_ms": 0.3030959788399438
+        },
+        "8": {
+          "forward_ms": 0.07330149334544937,
+          "forward_std": 0.0010064450393716532,
+          "backward_ms": 0.290683008885632,
+          "backward_std": 0.005791056999341934,
+          "total_ms": 0.36398450223108136,
+          "time_per_sample_ms": 0.04549806277888517
+        },
+        "32": {
+          "forward_ms": 0.08105868085597952,
+          "forward_std": 0.0034511817784928945,
+          "backward_ms": 0.3023282702391346,
+          "backward_std": 0.0049031376237615165,
+          "total_ms": 0.3833869510951141,
+          "time_per_sample_ms": 0.011980842221722316
+        }
+      }
+    },
+    "lebedev_19": {
+      "n_points": 146,
+      "method": "lebedev",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.052926118951290846,
+          "forward_std": 0.001128959371929042,
+          "backward_ms": 0.2466837914350132,
+          "backward_std": 0.004177277049146289,
+          "total_ms": 0.299609910386304,
+          "time_per_sample_ms": 0.299609910386304
+        },
+        "8": {
+          "forward_ms": 0.07532309973612428,
+          "forward_std": 0.0009123557075421828,
+          "backward_ms": 0.2935048930036525,
+          "backward_std": 0.004435523277367198,
+          "total_ms": 0.3688279927397768,
+          "time_per_sample_ms": 0.0461034990924721
+        },
+        "32": {
+          "forward_ms": 0.08972016318390767,
+          "forward_std": 0.0025030720429962874,
+          "backward_ms": 0.3188282096137603,
+          "backward_std": 0.006160653158410523,
+          "total_ms": 0.408548372797668,
+          "time_per_sample_ms": 0.012767136649927124
+        }
+      }
+    },
+    "lebedev_21": {
+      "n_points": 170,
+      "method": "lebedev",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.054258888121694326,
+          "forward_std": 0.002759937289190483,
+          "backward_ms": 0.24884988476211825,
+          "backward_std": 0.004373313475854791,
+          "total_ms": 0.30310877288381255,
+          "time_per_sample_ms": 0.30310877288381255
+        },
+        "8": {
+          "forward_ms": 0.07810753692562382,
+          "forward_std": 0.002453352263768163,
+          "backward_ms": 0.30056559868777794,
+          "backward_std": 0.006212997219532818,
+          "total_ms": 0.37867313561340177,
+          "time_per_sample_ms": 0.04733414195167522
+        },
+        "32": {
+          "forward_ms": 0.09266403115664919,
+          "forward_std": 0.003987746907214693,
+          "backward_ms": 0.32296058100958663,
+          "backward_std": 0.004365076001093567,
+          "total_ms": 0.4156246121662358,
+          "time_per_sample_ms": 0.012988269130194869
+        }
+      }
+    },
+    "lebedev_25": {
+      "n_points": 230,
+      "method": "lebedev",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.054028164595365524,
+          "forward_std": 0.00070140980679873,
+          "backward_ms": 0.2502201939933002,
+          "backward_std": 0.006642058053277221,
+          "total_ms": 0.3042483585886657,
+          "time_per_sample_ms": 0.3042483585886657
+        },
+        "8": {
+          "forward_ms": 0.08166261250153184,
+          "forward_std": 0.0038883081889068494,
+          "backward_ms": 0.3489791105190913,
+          "backward_std": 0.0685105311067154,
+          "total_ms": 0.43064172302062315,
+          "time_per_sample_ms": 0.05383021537757789
+        },
+        "32": {
+          "forward_ms": 0.09863576075683038,
+          "forward_std": 0.004733923705214315,
+          "backward_ms": 0.33360675054912764,
+          "backward_std": 0.004427866081054435,
+          "total_ms": 0.43224251130595803,
+          "time_per_sample_ms": 0.013507578478311189
+        }
+      }
+    }
+  },
+  "10": {
+    "uniform_50": {
+      "n_points": 5000,
+      "method": "uniform",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.20551429285357395,
+          "forward_std": 0.0047382411219784315,
+          "backward_ms": 0.5766229587607086,
+          "backward_std": 0.0220444585184825,
+          "total_ms": 0.7821372516142825,
+          "time_per_sample_ms": 0.7821372516142825
+        },
+        "8": {
+          "forward_ms": 0.4501898928234975,
+          "forward_std": 0.025909108966772884,
+          "backward_ms": 0.989638373721391,
+          "backward_std": 0.03157150501434246,
+          "total_ms": 1.4398282665448885,
+          "time_per_sample_ms": 0.17997853331811106
+        },
+        "32": {
+          "forward_ms": 0.8581262896768749,
+          "forward_std": 0.013159533938670621,
+          "backward_ms": 1.8860888667404652,
+          "backward_std": 0.05332122293536082,
+          "total_ms": 2.74421515641734,
+          "time_per_sample_ms": 0.08575672363804188
+        }
+      }
+    },
+    "uniform_100": {
+      "n_points": 20000,
+      "method": "uniform",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.7715923595242202,
+          "forward_std": 0.08540975492603205,
+          "backward_ms": 1.7374406685121357,
+          "backward_std": 0.12807464250293352,
+          "total_ms": 2.509033028036356,
+          "time_per_sample_ms": 2.509033028036356
+        },
+        "8": {
+          "forward_ms": 1.8909395711186032,
+          "forward_std": 0.22398022319781435,
+          "backward_ms": 4.427304312897225,
+          "backward_std": 0.49880838526283827,
+          "total_ms": 6.318243884015828,
+          "time_per_sample_ms": 0.7897804855019785
+        },
+        "32": {
+          "forward_ms": 4.65721149618427,
+          "forward_std": 0.42430745465491304,
+          "backward_ms": 9.151021600700915,
+          "backward_std": 0.7464879496033462,
+          "total_ms": 13.808233096885186,
+          "time_per_sample_ms": 0.43150728427766205
+        }
+      }
+    },
+    "uniform_150": {
+      "n_points": 45000,
+      "method": "uniform",
+      "batch_results": {
+        "1": {
+          "forward_ms": 3.705437345585475,
+          "forward_std": 0.351846584386457,
+          "backward_ms": 7.235011741674195,
+          "backward_std": 0.6077756034546793,
+          "total_ms": 10.94044908725967,
+          "time_per_sample_ms": 10.94044908725967
+        },
+        "8": {
+          "forward_ms": 6.17690469759206,
+          "forward_std": 0.6514001786735385,
+          "backward_ms": 12.58677284931764,
+          "backward_std": 0.9276075418188673,
+          "total_ms": 18.7636775469097,
+          "time_per_sample_ms": 2.3454596933637126
+        },
+        "32": {
+          "forward_ms": 11.068579271280518,
+          "forward_std": 1.0599236546935127,
+          "backward_ms": 22.522937584047515,
+          "backward_std": 1.2485529511199145,
+          "total_ms": 33.59151685532803,
+          "time_per_sample_ms": 1.049734901729001
+        }
+      }
+    },
+    "uniform_200": {
+      "n_points": 80000,
+      "method": "uniform",
+      "batch_results": {
+        "1": {
+          "forward_ms": 6.7197125948344665,
+          "forward_std": 0.6453254110764246,
+          "backward_ms": 13.523727507951358,
+          "backward_std": 0.9665346454496243,
+          "total_ms": 20.243440102785826,
+          "time_per_sample_ms": 20.243440102785826
+        },
+        "8": {
+          "forward_ms": 11.4916007189701,
+          "forward_std": 1.0967626955511172,
+          "backward_ms": 23.990861023776233,
+          "backward_std": 1.5420776170484867,
+          "total_ms": 35.48246174274633,
+          "time_per_sample_ms": 4.435307717843291
+        },
+        "32": {
+          "forward_ms": 20.035158606090892,
+          "forward_std": 1.0811334280437355,
+          "backward_ms": 56.56739772142222,
+          "backward_std": 0.9453653380919962,
+          "total_ms": 76.60255632751311,
+          "time_per_sample_ms": 2.393829885234785
+        }
+      }
+    },
+    "gauss_legendre": {
+      "n_points": 242,
+      "method": "gauss_legendre",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.0616269224944214,
+          "forward_std": 0.002730050372452905,
+          "backward_ms": 0.2681090962141752,
+          "backward_std": 0.00653166916269822,
+          "total_ms": 0.32973601870859665,
+          "time_per_sample_ms": 0.32973601870859665
+        },
+        "8": {
+          "forward_ms": 0.1010507345199585,
+          "forward_std": 0.005640352222480579,
+          "backward_ms": 0.33446240704506636,
+          "backward_std": 0.007793989109368981,
+          "total_ms": 0.43551314156502485,
+          "time_per_sample_ms": 0.05443914269562811
+        },
+        "32": {
+          "forward_ms": 0.14350516721606255,
+          "forward_std": 0.006627141249018418,
+          "backward_ms": 0.4258459045862158,
+          "backward_std": 0.011354932236221056,
+          "total_ms": 0.5693510718022783,
+          "time_per_sample_ms": 0.017792220993821196
+        }
+      }
+    },
+    "lebedev_11": {
+      "n_points": 50,
+      "method": "lebedev",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.055323836083213486,
+          "forward_std": 0.00297615616376973,
+          "backward_ms": 0.25181811458120745,
+          "backward_std": 0.005155488307571746,
+          "total_ms": 0.30714195066442096,
+          "time_per_sample_ms": 0.30714195066442096
+        },
+        "8": {
+          "forward_ms": 0.07533553677300613,
+          "forward_std": 0.0014712638902960613,
+          "backward_ms": 0.29908504026631516,
+          "backward_std": 0.005958548198396442,
+          "total_ms": 0.3744205770393213,
+          "time_per_sample_ms": 0.04680257212991516
+        },
+        "32": {
+          "forward_ms": 0.0859881634823978,
+          "forward_std": 0.0025704029562681873,
+          "backward_ms": 0.3162522295800348,
+          "backward_std": 0.011799112527205878,
+          "total_ms": 0.4022403930624326,
+          "time_per_sample_ms": 0.012570012283201018
+        }
+      }
+    },
+    "lebedev_15": {
+      "n_points": 86,
+      "method": "lebedev",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.05571097523594896,
+          "forward_std": 0.001685964259175834,
+          "backward_ms": 0.2509427606128156,
+          "backward_std": 0.004384558345182089,
+          "total_ms": 0.3066537358487646,
+          "time_per_sample_ms": 0.3066537358487646
+        },
+        "8": {
+          "forward_ms": 0.08155632919321458,
+          "forward_std": 0.004067478149116291,
+          "backward_ms": 0.3037854058978458,
+          "backward_std": 0.006111916376352046,
+          "total_ms": 0.3853417350910604,
+          "time_per_sample_ms": 0.04816771688638255
+        },
+        "32": {
+          "forward_ms": 0.10130251757800579,
+          "forward_std": 0.003082532317510958,
+          "backward_ms": 0.34459699721386033,
+          "backward_std": 0.017419080254510673,
+          "total_ms": 0.4458995147918661,
+          "time_per_sample_ms": 0.013934359837245816
+        }
+      }
+    },
+    "lebedev_19": {
+      "n_points": 146,
+      "method": "lebedev",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.058224700236072145,
+          "forward_std": 0.002330425775951414,
+          "backward_ms": 0.25813250880067545,
+          "backward_std": 0.008053144155981394,
+          "total_ms": 0.3163572090367476,
+          "time_per_sample_ms": 0.3163572090367476
+        },
+        "8": {
+          "forward_ms": 0.08921724511310458,
+          "forward_std": 0.004124312327577814,
+          "backward_ms": 0.3156782826408744,
+          "backward_std": 0.004052308157854913,
+          "total_ms": 0.40489552775397897,
+          "time_per_sample_ms": 0.05061194096924737
+        },
+        "32": {
+          "forward_ms": 0.11723376034448545,
+          "forward_std": 0.003909112177934604,
+          "backward_ms": 0.3720239580919345,
+          "backward_std": 0.006825813178618061,
+          "total_ms": 0.48925771843641996,
+          "time_per_sample_ms": 0.015289303701138124
+        }
+      }
+    },
+    "lebedev_21": {
+      "n_points": 170,
+      "method": "lebedev",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.05943824459488193,
+          "forward_std": 0.002052923282973678,
+          "backward_ms": 0.2578758362991114,
+          "backward_std": 0.0037085723634629774,
+          "total_ms": 0.3173140808939934,
+          "time_per_sample_ms": 0.3173140808939934
+        },
+        "8": {
+          "forward_ms": 0.09103886938343446,
+          "forward_std": 0.004066516701862717,
+          "backward_ms": 0.3216210015428563,
+          "backward_std": 0.0052482597075538045,
+          "total_ms": 0.41265987092629075,
+          "time_per_sample_ms": 0.051582483865786344
+        },
+        "32": {
+          "forward_ms": 0.12277493175740044,
+          "forward_std": 0.003199083577699878,
+          "backward_ms": 0.3914320996652047,
+          "backward_std": 0.018954413012805305,
+          "total_ms": 0.5142070314226052,
+          "time_per_sample_ms": 0.01606896973195641
+        }
+      }
+    },
+    "lebedev_25": {
+      "n_points": 230,
+      "method": "lebedev",
+      "batch_results": {
+        "1": {
+          "forward_ms": 0.06263544782996178,
+          "forward_std": 0.0029623417822784957,
+          "backward_ms": 0.264313203903536,
+          "backward_std": 0.003276622781080199,
+          "total_ms": 0.3269486517334978,
+          "time_per_sample_ms": 0.3269486517334978
+        },
+        "8": {
+          "forward_ms": 0.0978470469514529,
+          "forward_std": 0.002732024119221718,
+          "backward_ms": 0.3349970987377067,
+          "backward_std": 0.012623150427037141,
+          "total_ms": 0.43284414568915963,
+          "time_per_sample_ms": 0.054105518211144954
+        },
+        "32": {
+          "forward_ms": 0.137519925677528,
+          "forward_std": 0.0023344506909579368,
+          "backward_ms": 0.41254976531490684,
+          "backward_std": 0.00673719572327297,
+          "total_ms": 0.5500696909924349,
+          "time_per_sample_ms": 0.01718967784351359
+        }
+      }
+    }
+  }
+}
