@@ -1,0 +1,89 @@
+{
+  "config": {
+    "activation": "SiLU",
+    "grid_resolution": "default",
+    "target": "U0",
+    "seed": 42,
+    "epochs": 2,
+    "batch_size": 32,
+    "lr": 0.0002,
+    "n_params": 5155905,
+    "n_s2act_patched": 8,
+    "backbone": {
+      "use_pbc": "False",
+      "use_pbc_single": "False",
+      "regress_forces": "False",
+      "otf_graph": "True",
+      "max_neighbors": "20",
+      "max_radius": "5.0",
+      "max_num_elements": "10",
+      "num_layers": "4",
+      "sphere_channels": "64",
+      "attn_hidden_channels": "64",
+      "num_heads": "4",
+      "attn_alpha_channels": "16",
+      "attn_value_channels": "16",
+      "ffn_hidden_channels": "128",
+      "norm_type": "rms_norm_sh",
+      "lmax_list": "[4]",
+      "mmax_list": "[2]",
+      "grid_resolution": "None",
+      "num_sphere_samples": "128",
+      "edge_channels": "64",
+      "use_atom_edge_embedding": "True",
+      "share_atom_edge_embedding": "False",
+      "use_m_share_rad": "False",
+      "distance_function": "gaussian",
+      "num_distance_basis": "128",
+      "attn_activation": "scaled_silu",
+      "use_s2_act_attn": "False",
+      "use_attn_renorm": "True",
+      "ffn_activation": "scaled_silu",
+      "use_gate_act": "False",
+      "use_grid_mlp": "False",
+      "use_sep_s2_act": "True",
+      "alpha_drop": "0.0",
+      "drop_path_rate": "0.0",
+      "proj_drop": "0.0",
+      "weight_init": "normal",
+      "avg_num_nodes": "18.0",
+      "avg_degree": "15.0"
+    }
+  },
+  "results": {
+    "best_val_mae": 161.25999594726562,
+    "test_mae": 160.2944640239821,
+    "train_time_sec": 747.5592772960663,
+    "units": "eV"
+  },
+  "equivariance": {
+    "prediction_invariance_error": 1.9240533751671085e-05,
+    "prediction_invariance_std": 2.6621073757014183e-06,
+    "per_layer_l0_error_mean": {
+      "0": 1.893802910039395e-05,
+      "1": 0.0007868644589863654,
+      "2": 0.0004353875032224108,
+      "3": 0.0004049420344215383
+    },
+    "per_layer_l0_error_std": {
+      "0": 1.232962151162289e-06,
+      "1": 7.787396637313466e-05,
+      "2": 1.0753420249198549e-05,
+      "3": 8.619929004749595e-06
+    }
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_mae": 8585.943290198864,
+      "val_mae": 2495.005125,
+      "lr": 0.0001005
+    },
+    {
+      "epoch": 2,
+      "train_mae": 500.4250554509943,
+      "val_mae": 161.25999594726562,
+      "lr": 1e-06
+    }
+  ]
+}

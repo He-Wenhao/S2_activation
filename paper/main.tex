@@ -135,14 +135,14 @@ $\beta$, confirming that leakage is controlled by activation smoothness. Notably
 ($R{=}0.094$) has moderate leakage despite being $C^\infty$, because saturation compresses
 the output range.
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=\columnwidth]{fig1_leakage.png}
+  \includegraphics[width=\textwidth]{fig1_leakage.png}
   \caption{Spectral leakage ratio $R$ (Eq.~\ref{eq:leakage}) for each activation at
   $\ell_{\max} = 3, 6, 10$. Red: $C^0$. Green: Softplus family. Blue: $C^\infty$.
   Error bars: std over 10 random inputs.}
   \label{fig:leakage}
-\end{figure}
+\end{figure*}
 
 \paragraph{Leakage predicts equivariance error.}
 Figure~\ref{fig:equiv_vs_leak} plots $E_{\mathrm{equiv}}$ against $R$ for each
@@ -151,14 +151,14 @@ aliases back into $\ell \le \ell_{\max}$ coefficients in a rotation-dependent ma
 since different rotations move the function relative to the fixed quadrature grid,
 producing different aliasing patterns.
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=0.85\columnwidth]{fig2_equiv_vs_leak.png}
+  \includegraphics[width=0.85\textwidth]{fig2_equiv_vs_leak.png}
   \caption{Equivariance error $E_{\mathrm{equiv}}$ vs.\ leakage ratio $R$ at
   $\ell_{\max} = 3, 6, 10$ (GL$_{1\times}$). Each point is one activation.
   The correlation shows leakage is a strong predictor of equivariance violation.}
   \label{fig:equiv_vs_leak}
-\end{figure}
+\end{figure*}
 
 %========================================================================
 \section{Equivariance Error vs.\ Sampling Strategy}
@@ -192,23 +192,23 @@ Oversampling reduces aliasing by providing enough quadrature points to accuratel
 these cross-terms. Smoother activations benefit more because they have less high-$\ell$
 content to alias.
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=\columnwidth]{fig3_coeff_oversamp.png}
+  \includegraphics[width=\textwidth]{fig3_coeff_oversamp.png}
   \caption{Coefficient error $E_{\mathrm{coeff}}$ vs.\ GL oversampling ratio.
   Near-flat curves show that quadrature resolution does not reduce coefficient error,
   because truncation dominates.}
   \label{fig:coeff_oversamp}
-\end{figure}
+\end{figure*}
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=\columnwidth]{fig4_equiv_oversamp.png}
+  \includegraphics[width=\textwidth]{fig4_equiv_oversamp.png}
   \caption{Equivariance error $E_{\mathrm{equiv}}$ vs.\ GL oversampling ratio.
   Compare with Fig.~\ref{fig:coeff_oversamp}: while coefficient error is flat,
   equivariance error drops 1--2 orders of magnitude with $3\times$ oversampling.}
   \label{fig:equiv_oversamp}
-\end{figure}
+\end{figure*}
 
 \begin{table}[t]
   \caption{Equivariance error under GL oversampling ($\ell_{\max}{=}6$).}
@@ -238,14 +238,14 @@ activations. Uniform grids at high resolution ($N{=}5000$) achieve the lowest er
 all activations. The relative ranking of activations is preserved across all quadrature
 methods, confirming that the smoothness effect is independent of quadrature choice.
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=\columnwidth]{fig5_sampling.png}
+  \includegraphics[width=\textwidth]{fig5_sampling.png}
   \caption{$E_{\mathrm{equiv}}$ under six sampling strategies at $\ell_{\max}{=}6$.
   $N$: number of quadrature points. Log scale. The activation ranking is stable
   across methods.}
   \label{fig:sampling}
-\end{figure}
+\end{figure*}
 
 %========================================================================
 \section{Jacobian Isotropy Analysis}
@@ -308,23 +308,23 @@ are separable. Under GL$_{1\times}$, Softplus(1) and SiLU sit in the low-leakage
 high-isotropy quadrant, while tanh has lower isotropy due to saturation and $|\cdot|$ has
 high isotropy but high leakage.
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=\columnwidth]{fig6_effrank.png}
+  \includegraphics[width=\textwidth]{fig6_effrank.png}
   \caption{Effective rank (Eq.~\ref{eq:effrank}) of the S2 Activation Jacobian for
   GL$_{1\times}$ at $\ell_{\max} = 3, 6, 10$. Dashed: max rank $d$.
   Averaged over 50 random inputs.}
   \label{fig:effrank}
-\end{figure}
+\end{figure*}
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=0.85\columnwidth]{fig7_effrank_vs_leak.png}
+  \includegraphics[width=0.85\textwidth]{fig7_effrank_vs_leak.png}
   \caption{Effective rank vs.\ spectral leakage at $\ell_{\max} = 3, 6, 10$
   (GL$_{1\times}$). The two axes measure different properties: leakage quantifies energy
   lost above $\ell_{\max}$; isotropy quantifies output diversity within $\ell_{\max}$.}
   \label{fig:effrank_vs_leak}
-\end{figure}
+\end{figure*}
 
 %========================================================================
 \section{Pilot: Downstream Task Performance}
@@ -390,19 +390,19 @@ guarantee best task performance in shallow models.
 \appendix
 \section{Additional Figures}
 
-\begin{figure}[h]
+\begin{figure*}[h]
   \centering
-  \includegraphics[width=\columnwidth]{fig8_task_acc.png}
+  \includegraphics[width=\textwidth]{fig8_task_acc.png}
   \caption{Test accuracy by (activation $\times$ sampling) configuration.
   2 runs per config, 15 epochs, $\ell_{\max}{=}6$.}
   \label{fig:task_acc}
-\end{figure}
+\end{figure*}
 
-\begin{figure}[h]
+\begin{figure*}[h]
   \centering
-  \includegraphics[width=0.85\columnwidth]{fig9_acc_vs_equiv.png}
+  \includegraphics[width=0.85\textwidth]{fig9_acc_vs_equiv.png}
   \caption{Task accuracy vs.\ equivariance error. No clear monotonic trend.}
   \label{fig:acc_vs_equiv}
-\end{figure}
+\end{figure*}
 
 \end{document}

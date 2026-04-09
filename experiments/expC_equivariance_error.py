@@ -362,6 +362,12 @@ def plot_equiv_vs_leakage(results, output_dir):
             from scipy.stats import pearsonr
             r, p = pearsonr(xs, ys)
             ax.set_title(f'l_max = {l_max} (r={r:.2f}, p={p:.3f})')
+            # Add dashed regression line
+            xs_arr = np.array(xs)
+            ys_arr = np.array(ys)
+            coeffs = np.polyfit(xs_arr, ys_arr, 1)
+            x_line = np.linspace(xs_arr.min(), xs_arr.max(), 100)
+            ax.plot(x_line, np.polyval(coeffs, x_line), 'k--', alpha=0.5, linewidth=1.5)
 
     plt.suptitle('Experiment C: Equivariance Error vs Spectral Leakage', fontsize=14)
     plt.tight_layout()
