@@ -1,0 +1,776 @@
+{
+  "3": {
+    "ReLU": {
+      "GL_1x": {
+        "mean_equiv_error": 0.23668794254642456,
+        "std_equiv_error": 0.13034491301962564,
+        "n_points": 32
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.03552653874611552,
+        "std_equiv_error": 0.0185868231947032,
+        "n_points": 98
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.012849710178163188,
+        "std_equiv_error": 0.006034855131253007,
+        "n_points": 200
+      },
+      "Leb_min_d7": {
+        "mean_equiv_error": 0.25559261901660935,
+        "std_equiv_error": 0.15200968556075567,
+        "n_points": 26
+      },
+      "Leb_2x_d13": {
+        "mean_equiv_error": 0.0608757045453019,
+        "std_equiv_error": 0.024660375632125718,
+        "n_points": 74
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0005155094637577846,
+        "std_equiv_error": 0.0002870441091472257,
+        "n_points": 5000
+      }
+    },
+    "abs": {
+      "GL_1x": {
+        "mean_equiv_error": 0.2857376021916522,
+        "std_equiv_error": 0.07544158269577003,
+        "n_points": 32
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.04330234411960932,
+        "std_equiv_error": 0.011080134502294907,
+        "n_points": 98
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.015942000671943377,
+        "std_equiv_error": 0.003889346187713422,
+        "n_points": 200
+      },
+      "Leb_min_d7": {
+        "mean_equiv_error": 0.30678431773592096,
+        "std_equiv_error": 0.08364935937141041,
+        "n_points": 26
+      },
+      "Leb_2x_d13": {
+        "mean_equiv_error": 0.07753449297135338,
+        "std_equiv_error": 0.023305881500662668,
+        "n_points": 74
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0006321141937436839,
+        "std_equiv_error": 0.00019368646708260747,
+        "n_points": 5000
+      }
+    },
+    "SiLU": {
+      "GL_1x": {
+        "mean_equiv_error": 0.20077570866548577,
+        "std_equiv_error": 0.11266343290528946,
+        "n_points": 32
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.004911672787950867,
+        "std_equiv_error": 0.0046278751681643636,
+        "n_points": 98
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.0002222998973224281,
+        "std_equiv_error": 0.000243210084711027,
+        "n_points": 200
+      },
+      "Leb_min_d7": {
+        "mean_equiv_error": 0.22265860138730798,
+        "std_equiv_error": 0.13555984240394772,
+        "n_points": 26
+      },
+      "Leb_2x_d13": {
+        "mean_equiv_error": 0.008338053607169025,
+        "std_equiv_error": 0.0060317319488847835,
+        "n_points": 74
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0004785828724623328,
+        "std_equiv_error": 0.00029043302078610335,
+        "n_points": 5000
+      }
+    },
+    "GELU": {
+      "GL_1x": {
+        "mean_equiv_error": 0.2484738193885513,
+        "std_equiv_error": 0.15229136697905915,
+        "n_points": 32
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.012335629165885495,
+        "std_equiv_error": 0.010942311925569137,
+        "n_points": 98
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.0009431472869270766,
+        "std_equiv_error": 0.0009582499862904116,
+        "n_points": 200
+      },
+      "Leb_min_d7": {
+        "mean_equiv_error": 0.2730193157581914,
+        "std_equiv_error": 0.18561306404179417,
+        "n_points": 26
+      },
+      "Leb_2x_d13": {
+        "mean_equiv_error": 0.021270946587667584,
+        "std_equiv_error": 0.014179479816207442,
+        "n_points": 74
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.00044998556220121974,
+        "std_equiv_error": 0.0003241246676983078,
+        "n_points": 5000
+      }
+    },
+    "tanh": {
+      "GL_1x": {
+        "mean_equiv_error": 0.1568887493992148,
+        "std_equiv_error": 0.044885264030096496,
+        "n_points": 32
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.017366513346960707,
+        "std_equiv_error": 0.007838024686127178,
+        "n_points": 98
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.0024713456981897792,
+        "std_equiv_error": 0.0016593574648144582,
+        "n_points": 200
+      },
+      "Leb_min_d7": {
+        "mean_equiv_error": 0.1696505686875664,
+        "std_equiv_error": 0.05048409619771789,
+        "n_points": 26
+      },
+      "Leb_2x_d13": {
+        "mean_equiv_error": 0.03177044886218601,
+        "std_equiv_error": 0.01474692644733835,
+        "n_points": 74
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0005848820650990375,
+        "std_equiv_error": 0.0001517168249305661,
+        "n_points": 5000
+      }
+    },
+    "Softplus_1": {
+      "GL_1x": {
+        "mean_equiv_error": 0.06639433521783378,
+        "std_equiv_error": 0.032016006837932126,
+        "n_points": 32
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.0008554742167851608,
+        "std_equiv_error": 0.0008135702276914818,
+        "n_points": 98
+      },
+      "GL_3x": {
+        "mean_equiv_error": 2.537313566301403e-05,
+        "std_equiv_error": 2.9243207347978184e-05,
+        "n_points": 200
+      },
+      "Leb_min_d7": {
+        "mean_equiv_error": 0.07369973167683287,
+        "std_equiv_error": 0.037261229838922924,
+        "n_points": 26
+      },
+      "Leb_2x_d13": {
+        "mean_equiv_error": 0.001430690841998091,
+        "std_equiv_error": 0.0010857117624711579,
+        "n_points": 74
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.00045077368878779364,
+        "std_equiv_error": 0.000195825352460389,
+        "n_points": 5000
+      }
+    },
+    "Softplus_10": {
+      "GL_1x": {
+        "mean_equiv_error": 0.2244299977587951,
+        "std_equiv_error": 0.12340178773882192,
+        "n_points": 32
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.027510724749659973,
+        "std_equiv_error": 0.015613958950394788,
+        "n_points": 98
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.007905794698454894,
+        "std_equiv_error": 0.004137598759380741,
+        "n_points": 200
+      },
+      "Leb_min_d7": {
+        "mean_equiv_error": 0.24344916516306447,
+        "std_equiv_error": 0.14617337207674438,
+        "n_points": 26
+      },
+      "Leb_2x_d13": {
+        "mean_equiv_error": 0.04784747247352993,
+        "std_equiv_error": 0.020845260828649,
+        "n_points": 74
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0004059661509119564,
+        "std_equiv_error": 0.00033484475298337367,
+        "n_points": 5000
+      }
+    },
+    "Softplus_100": {
+      "GL_1x": {
+        "mean_equiv_error": 0.23650273471718553,
+        "std_equiv_error": 0.13024490132110955,
+        "n_points": 32
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.03539439261027301,
+        "std_equiv_error": 0.018539820067672522,
+        "n_points": 98
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.012730741140611885,
+        "std_equiv_error": 0.006006268636854695,
+        "n_points": 200
+      },
+      "Leb_min_d7": {
+        "mean_equiv_error": 0.25540278469736827,
+        "std_equiv_error": 0.15192971419978651,
+        "n_points": 26
+      },
+      "Leb_2x_d13": {
+        "mean_equiv_error": 0.06063078767760473,
+        "std_equiv_error": 0.024517043695782885,
+        "n_points": 74
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0004903773641033106,
+        "std_equiv_error": 0.000293453807353036,
+        "n_points": 5000
+      }
+    }
+  },
+  "6": {
+    "ReLU": {
+      "GL_1x": {
+        "mean_equiv_error": 0.24371304233482305,
+        "std_equiv_error": 0.06334978946686162,
+        "n_points": 98
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.02972434248719946,
+        "std_equiv_error": 0.008090798664337973,
+        "n_points": 338
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.010765188032299451,
+        "std_equiv_error": 0.0024340866922404054,
+        "n_points": 722
+      },
+      "Leb_min_d13": {
+        "mean_equiv_error": 0.42879206321626806,
+        "std_equiv_error": 0.08989875811951806,
+        "n_points": 74
+      },
+      "Leb_2x_d25": {
+        "mean_equiv_error": 0.04848857135670949,
+        "std_equiv_error": 0.015786504440351005,
+        "n_points": 230
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0013640078397907085,
+        "std_equiv_error": 0.0005196032853062195,
+        "n_points": 5000
+      }
+    },
+    "abs": {
+      "GL_1x": {
+        "mean_equiv_error": 0.3333255213856611,
+        "std_equiv_error": 0.052129868505812915,
+        "n_points": 98
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.04127840657428438,
+        "std_equiv_error": 0.007087898503868484,
+        "n_points": 338
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.015075148401600225,
+        "std_equiv_error": 0.00229241926698587,
+        "n_points": 722
+      },
+      "Leb_min_d13": {
+        "mean_equiv_error": 0.5794487138926415,
+        "std_equiv_error": 0.09410690825026119,
+        "n_points": 74
+      },
+      "Leb_2x_d25": {
+        "mean_equiv_error": 0.06753924856235899,
+        "std_equiv_error": 0.01695173801321574,
+        "n_points": 230
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.001761797499757081,
+        "std_equiv_error": 0.0003568091324512213,
+        "n_points": 5000
+      }
+    },
+    "SiLU": {
+      "GL_1x": {
+        "mean_equiv_error": 0.2600066640819311,
+        "std_equiv_error": 0.0736822837564381,
+        "n_points": 98
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.013426943453414828,
+        "std_equiv_error": 0.005655114549501553,
+        "n_points": 338
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.0016025410672140966,
+        "std_equiv_error": 0.0009786958099132041,
+        "n_points": 722
+      },
+      "Leb_min_d13": {
+        "mean_equiv_error": 0.45347448790883393,
+        "std_equiv_error": 0.10593598448817014,
+        "n_points": 74
+      },
+      "Leb_2x_d25": {
+        "mean_equiv_error": 0.017920830478385157,
+        "std_equiv_error": 0.008137054142117697,
+        "n_points": 230
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0008855995689610624,
+        "std_equiv_error": 0.0006997303083758299,
+        "n_points": 5000
+      }
+    },
+    "GELU": {
+      "GL_1x": {
+        "mean_equiv_error": 0.2684168429383292,
+        "std_equiv_error": 0.0715887734475646,
+        "n_points": 98
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.02411983003521555,
+        "std_equiv_error": 0.008086254909561363,
+        "n_points": 338
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.004527472584219389,
+        "std_equiv_error": 0.0021607333855308553,
+        "n_points": 722
+      },
+      "Leb_min_d13": {
+        "mean_equiv_error": 0.46895875031966516,
+        "std_equiv_error": 0.10338718067991248,
+        "n_points": 74
+      },
+      "Leb_2x_d25": {
+        "mean_equiv_error": 0.033209750211103055,
+        "std_equiv_error": 0.012909485468368596,
+        "n_points": 230
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0008801247856371352,
+        "std_equiv_error": 0.0007065778996477836,
+        "n_points": 5000
+      }
+    },
+    "tanh": {
+      "GL_1x": {
+        "mean_equiv_error": 0.2806978746624734,
+        "std_equiv_error": 0.04137902252927434,
+        "n_points": 98
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.05201574740771438,
+        "std_equiv_error": 0.015493070204719734,
+        "n_points": 338
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.013363122519059483,
+        "std_equiv_error": 0.005929791545035445,
+        "n_points": 722
+      },
+      "Leb_min_d13": {
+        "mean_equiv_error": 0.516579997053218,
+        "std_equiv_error": 0.08054025807773824,
+        "n_points": 74
+      },
+      "Leb_2x_d25": {
+        "mean_equiv_error": 0.0779633870467198,
+        "std_equiv_error": 0.028686933741060763,
+        "n_points": 230
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0011676498103942567,
+        "std_equiv_error": 0.00020258359695810526,
+        "n_points": 5000
+      }
+    },
+    "Softplus_1": {
+      "GL_1x": {
+        "mean_equiv_error": 0.14193804205042004,
+        "std_equiv_error": 0.03950232703045632,
+        "n_points": 98
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.003781995277336392,
+        "std_equiv_error": 0.0019389171279010193,
+        "n_points": 338
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.00031510333303000836,
+        "std_equiv_error": 0.00023401281967328025,
+        "n_points": 722
+      },
+      "Leb_min_d13": {
+        "mean_equiv_error": 0.2540109842345675,
+        "std_equiv_error": 0.06067892763761077,
+        "n_points": 74
+      },
+      "Leb_2x_d25": {
+        "mean_equiv_error": 0.004975916352649455,
+        "std_equiv_error": 0.002552083719677098,
+        "n_points": 230
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0009800798931811443,
+        "std_equiv_error": 0.0005414287756783219,
+        "n_points": 5000
+      }
+    },
+    "Softplus_10": {
+      "GL_1x": {
+        "mean_equiv_error": 0.2406573096232531,
+        "std_equiv_error": 0.06262659848045549,
+        "n_points": 98
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.027226552135751713,
+        "std_equiv_error": 0.007597709978963383,
+        "n_points": 338
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.008981145632054526,
+        "std_equiv_error": 0.0021812114464500477,
+        "n_points": 722
+      },
+      "Leb_min_d13": {
+        "mean_equiv_error": 0.423418919634437,
+        "std_equiv_error": 0.08942338888755591,
+        "n_points": 74
+      },
+      "Leb_2x_d25": {
+        "mean_equiv_error": 0.04215705819681041,
+        "std_equiv_error": 0.013831314926707554,
+        "n_points": 230
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0010316889270019388,
+        "std_equiv_error": 0.0006076476515465494,
+        "n_points": 5000
+      }
+    },
+    "Softplus_100": {
+      "GL_1x": {
+        "mean_equiv_error": 0.24369457026962016,
+        "std_equiv_error": 0.06335024557095571,
+        "n_points": 98
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.029690075582585688,
+        "std_equiv_error": 0.008083532717153216,
+        "n_points": 338
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.010736044210579481,
+        "std_equiv_error": 0.0024281559645055297,
+        "n_points": 722
+      },
+      "Leb_min_d13": {
+        "mean_equiv_error": 0.4287307420437335,
+        "std_equiv_error": 0.08989040553545684,
+        "n_points": 74
+      },
+      "Leb_2x_d25": {
+        "mean_equiv_error": 0.048400503767707555,
+        "std_equiv_error": 0.01575220216359113,
+        "n_points": 230
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.001348869601419386,
+        "std_equiv_error": 0.0005220477954257838,
+        "n_points": 5000
+      }
+    }
+  },
+  "10": {
+    "ReLU": {
+      "GL_1x": {
+        "mean_equiv_error": 0.23650532899634277,
+        "std_equiv_error": 0.031394741052176406,
+        "n_points": 242
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.02641268192795145,
+        "std_equiv_error": 0.003410731622355519,
+        "n_points": 882
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.009397937569865678,
+        "std_equiv_error": 0.001374319676641656,
+        "n_points": 1922
+      },
+      "Leb_min_d21": {
+        "mean_equiv_error": 0.2690826972950963,
+        "std_equiv_error": 0.03254526209356651,
+        "n_points": 170
+      },
+      "Leb_2x_d41": {
+        "mean_equiv_error": 0.03132784630020144,
+        "std_equiv_error": 0.004042535851611191,
+        "n_points": 590
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0031986555943422324,
+        "std_equiv_error": 0.0005437790554099071,
+        "n_points": 5000
+      }
+    },
+    "abs": {
+      "GL_1x": {
+        "mean_equiv_error": 0.3356570602547035,
+        "std_equiv_error": 0.03556110250173445,
+        "n_points": 242
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.0380964577669623,
+        "std_equiv_error": 0.0041849199773450205,
+        "n_points": 882
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.013512922745532823,
+        "std_equiv_error": 0.00130375380584252,
+        "n_points": 1922
+      },
+      "Leb_min_d21": {
+        "mean_equiv_error": 0.3806820811104719,
+        "std_equiv_error": 0.03512218001063327,
+        "n_points": 170
+      },
+      "Leb_2x_d41": {
+        "mean_equiv_error": 0.04514559612247664,
+        "std_equiv_error": 0.004509741900894726,
+        "n_points": 590
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.004320918859183271,
+        "std_equiv_error": 0.0004958182796960659,
+        "n_points": 5000
+      }
+    },
+    "SiLU": {
+      "GL_1x": {
+        "mean_equiv_error": 0.25774424815189145,
+        "std_equiv_error": 0.035412442851619964,
+        "n_points": 242
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.019529710227038772,
+        "std_equiv_error": 0.0037588266293348428,
+        "n_points": 882
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.003602529027634497,
+        "std_equiv_error": 0.0010487256304678287,
+        "n_points": 1922
+      },
+      "Leb_min_d21": {
+        "mean_equiv_error": 0.29231350741488404,
+        "std_equiv_error": 0.03698260845095697,
+        "n_points": 170
+      },
+      "Leb_2x_d41": {
+        "mean_equiv_error": 0.02335954034315919,
+        "std_equiv_error": 0.0041590409615128495,
+        "n_points": 590
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0014864541485267503,
+        "std_equiv_error": 0.0008604915105157103,
+        "n_points": 5000
+      }
+    },
+    "GELU": {
+      "GL_1x": {
+        "mean_equiv_error": 0.2536496729197314,
+        "std_equiv_error": 0.03392771742971998,
+        "n_points": 242
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.027327044603855086,
+        "std_equiv_error": 0.004076155090627483,
+        "n_points": 882
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.007451110240370291,
+        "std_equiv_error": 0.0015932375028026176,
+        "n_points": 1922
+      },
+      "Leb_min_d21": {
+        "mean_equiv_error": 0.2887898405808446,
+        "std_equiv_error": 0.03520026599743815,
+        "n_points": 170
+      },
+      "Leb_2x_d41": {
+        "mean_equiv_error": 0.033005496232242304,
+        "std_equiv_error": 0.004509157040083085,
+        "n_points": 590
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0018038188905964963,
+        "std_equiv_error": 0.0007618356704360877,
+        "n_points": 5000
+      }
+    },
+    "tanh": {
+      "GL_1x": {
+        "mean_equiv_error": 0.36930488543054635,
+        "std_equiv_error": 0.03401121444369035,
+        "n_points": 242
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.08158125536115352,
+        "std_equiv_error": 0.00955418091613185,
+        "n_points": 882
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.02512894946425894,
+        "std_equiv_error": 0.00450557285811546,
+        "n_points": 1922
+      },
+      "Leb_min_d21": {
+        "mean_equiv_error": 0.40975146789877753,
+        "std_equiv_error": 0.031624172924136475,
+        "n_points": 170
+      },
+      "Leb_2x_d41": {
+        "mean_equiv_error": 0.09437120385103583,
+        "std_equiv_error": 0.01153763879352279,
+        "n_points": 590
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.004899463924141328,
+        "std_equiv_error": 0.0011513972970871803,
+        "n_points": 5000
+      }
+    },
+    "Softplus_1": {
+      "GL_1x": {
+        "mean_equiv_error": 0.18056919101042113,
+        "std_equiv_error": 0.024998899591154346,
+        "n_points": 242
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.007469606398112474,
+        "std_equiv_error": 0.0017874362621440058,
+        "n_points": 882
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.0009515453083761324,
+        "std_equiv_error": 0.0003164305014079501,
+        "n_points": 1922
+      },
+      "Leb_min_d21": {
+        "mean_equiv_error": 0.20151587648933492,
+        "std_equiv_error": 0.025706623853791747,
+        "n_points": 170
+      },
+      "Leb_2x_d41": {
+        "mean_equiv_error": 0.008834241227870906,
+        "std_equiv_error": 0.002013009671272474,
+        "n_points": 590
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0014949797495978187,
+        "std_equiv_error": 0.0007949227143869495,
+        "n_points": 5000
+      }
+    },
+    "Softplus_10": {
+      "GL_1x": {
+        "mean_equiv_error": 0.23528433226599163,
+        "std_equiv_error": 0.03124242138574772,
+        "n_points": 242
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.025300890360365667,
+        "std_equiv_error": 0.0033860835469447167,
+        "n_points": 882
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.008583216083806381,
+        "std_equiv_error": 0.0013091193129164238,
+        "n_points": 1922
+      },
+      "Leb_min_d21": {
+        "mean_equiv_error": 0.26748729161091556,
+        "std_equiv_error": 0.032428112019259006,
+        "n_points": 170
+      },
+      "Leb_2x_d41": {
+        "mean_equiv_error": 0.030146665245195835,
+        "std_equiv_error": 0.0039662537174786705,
+        "n_points": 590
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0027577365326117973,
+        "std_equiv_error": 0.0005698791783981279,
+        "n_points": 5000
+      }
+    },
+    "Softplus_100": {
+      "GL_1x": {
+        "mean_equiv_error": 0.23649223482707413,
+        "std_equiv_error": 0.03138985124170605,
+        "n_points": 242
+      },
+      "GL_2x": {
+        "mean_equiv_error": 0.026398475167738616,
+        "std_equiv_error": 0.003412969394807563,
+        "n_points": 882
+      },
+      "GL_3x": {
+        "mean_equiv_error": 0.009387009536955529,
+        "std_equiv_error": 0.0013736520616999131,
+        "n_points": 1922
+      },
+      "Leb_min_d21": {
+        "mean_equiv_error": 0.2690662394858941,
+        "std_equiv_error": 0.03254742894252172,
+        "n_points": 170
+      },
+      "Leb_2x_d41": {
+        "mean_equiv_error": 0.03131170918444207,
+        "std_equiv_error": 0.004043360379234556,
+        "n_points": 590
+      },
+      "Uniform_50": {
+        "mean_equiv_error": 0.0031908831481030782,
+        "std_equiv_error": 0.000543816104214025,
+        "n_points": 5000
+      }
+    }
+  }
+}

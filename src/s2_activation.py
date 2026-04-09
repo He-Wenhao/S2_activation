@@ -47,6 +47,7 @@ class S2Activation(nn.Module):
 
     def __init__(self, irreps_in, act, sampling_method='gauss_legendre',
                  resolution=None, degree=None, num_points=None,
+                 n_theta=None, n_phi=None,
                  lmax_out=None, normalization='integral'):
         super().__init__()
 
@@ -92,6 +93,8 @@ class S2Activation(nn.Module):
             resolution=resolution,
             degree=degree,
             num_points=num_points,
+            n_theta=n_theta,
+            n_phi=n_phi,
         )
 
         # Pre-compute SH matrices for forward and inverse transforms
