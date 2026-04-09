@@ -1,0 +1,46 @@
+% Minimal ICML 2024 compatible style for workshop papers
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{icml2024}[2024/01/01 ICML 2024 Workshop Style]
+
+\newif\if@accepted\@acceptedfalse
+\DeclareOption{accepted}{\@acceptedtrue}
+\ProcessOptions\relax
+
+% Page layout
+\RequirePackage[letterpaper,margin=1in,columnsep=0.25in]{geometry}
+\RequirePackage{times}
+\RequirePackage[T1]{fontenc}
+\RequirePackage{amsmath,amsfonts,amssymb}
+\RequirePackage{graphicx}
+\RequirePackage[colorlinks=true,citecolor=blue,urlcolor=blue,linkcolor=blue]{hyperref}
+\RequirePackage[round]{natbib}
+\RequirePackage[font=small,labelfont=bf]{caption}
+\RequirePackage{fancyhdr}
+\RequirePackage{titlesec}
+\RequirePackage{enumitem}
+\RequirePackage{booktabs}
+\RequirePackage[table]{xcolor}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyhead[C]{\if@accepted\else\small\textit{Under review}\fi}
+\fancyfoot[C]{\small\thepage}
+
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{0.5em}{}
+\setlist{nosep,leftmargin=*}
+
+% Title + author block
+\newcommand{\icmltitleblock}[1]{%
+  \twocolumn[%
+    \begin{center}#1\end{center}\vskip 1.5em%
+  ]%
+}
+
+\renewenvironment{abstract}{%
+  \centerline{\bfseries Abstract}\vskip 0.5em%
+  \begin{quote}\small%
+}{\end{quote}\vskip 1em}
+
+\endinput

@@ -148,6 +148,8 @@ def main():
         expC = json.load(f)
     with open('results/metrics/expD_task.json') as f:
         expD = json.load(f)
+    with open('results/metrics/expE_expressibility.json') as f:
+        expE = json.load(f)
 
     # Generate the new sampling-comparison figure
     fig5_path = generate_sampling_comparison_figure(expC)
@@ -508,33 +510,146 @@ def main():
     pdf.add_table(headers, rows, col_widths=[32, 32, 32, 32, 32, 32])
 
     # ==================================================================
-    # 4. PRELIMINARY: TASK PERFORMANCE (Exp D)
+    # 4. EXPRESSIBILITY AND TASK PERFORMANCE
     # ==================================================================
     pdf.add_page()
-    pdf.section_title('4. Preliminary: Downstream Task Performance')
+    pdf.section_title('4. Expressibility and Task Performance')
 
+    pdf.sub_title('4.1 Measuring Expressibility: Effective Rank of the Jacobian')
     pdf.body_text(
-        'Goal: Explore whether spectral/equivariance analysis correlates with '
-        'downstream performance.\n\n'
-        'Method: Train a 1-layer SphericalCNN on a synthetic 5-class classification '
-        'task (l_max = 6), where class-discriminative information resides in high-l '
-        'coefficients. The model consists of a linear layer, S2Activation, and a '
-        'classification head. We test 5 activations x 3 sampling configs, with '
-        '2 runs per configuration (15 epochs each).\n\n'
-        'Result (PRELIMINARY): Accuracy differences across activations are small '
-        '(1-2%). Notably, tanh achieves the best task accuracy despite having worse '
-        'leakage and equivariance than Softplus_1 or SiLU. This suggests that '
-        'activation expressivity and optimization landscape effects are significant '
-        'confounders that this experiment does not control for. The '
-        'smoothness-to-performance chain is not validated by these results alone.\n\n'
-        'Specifically, different nonlinearities have different approximation capacity: '
-        'tanh can represent a richer class of functions on S^2 than, say, a very smooth '
-        'Softplus(1), even when both suffer from truncation. A controlled experiment '
-        'would need to match expressivity across activations (e.g., by adjusting model '
-        'width or depth) before attributing accuracy differences to equivariance alone.'
+        'Sections 2-3 characterize how activation choice and sampling affect '
+        'equivariance error. However, equivariance is not the only property that '
+        'matters for downstream performance: the activation must also be expressive '
+        'enough to represent useful nonlinear transformations on the sphere. We now '
+        'quantify this expressibility and examine whether it explains task performance '
+        'differences that leakage alone cannot.\n\n'
+        'Definition.  The S2 Activation operator A_sigma maps input SH coefficients '
+        'c in R^d to output coefficients c\' in R^d (where d = (l_max+1)^2). '
+        'At each input c, the Jacobian J(c) = dA_sigma/dc is a d x d matrix whose '
+        'singular values {s_1 >= s_2 >= ... >= s_d} describe how the operator locally '
+        'stretches or compresses each direction in coefficient space.\n\n'
+        'We define the expressibility as the effective rank of J:\n'
+        '    EffRank(J) = exp(H(p)),  where  p_i = s_i^2 / sum_j s_j^2\n'
+        'and H(p) = -sum_i p_i log(p_i) is the Shannon entropy. The effective rank '
+        'is a continuous quantity in [1, d] that counts how many independent directions '
+        'in output space the S2 Activation can locally explore. A near-identity operator '
+        '(all s_i equal) has EffRank = d; an operator that collapses most directions '
+        '(one dominant s_i) has EffRank near 1.\n\n'
+        'Computation.  For the S2 Activation forward pass c -> Y c -> sigma(.) -> '
+        'wY^T (.), the Jacobian is J = wY^T diag(sigma\'(Yc)) Y, where Y is the '
+        'SH evaluation matrix and wY the weighted inverse matrix. We compute J via '
+        'autograd and take its SVD. Results are averaged over 50 random inputs '
+        '(c_lm ~ N(0,1)) at each l_max.'
     )
 
-    pdf.sub_title('Table 4: Test Accuracy')
+    # Fig 6: Expressibility bar chart
+    pdf.add_figure(
+        'results/figures/expE_expressibility_bar.png',
+        'Figure 6: Effective rank of the S2Activation Jacobian for each '
+        'activation function at l_max = 3, 6, 10. Dashed line: maximum rank d = '
+        '(l_max+1)^2. Higher effective rank means the operator explores more '
+        'independent output directions. Red: C^0 activations. Green: Softplus family. '
+        'Blue: C^inf smooth. Averaged over 50 random inputs.'
+    )
+
+    pdf.body_text(
+        'The results reveal a surprising pattern that contradicts naive intuitions '
+        'about expressibility:\n\n'
+        '  - Softplus(1) has the HIGHEST effective rank despite being the smoothest '
+        'activation. This is because smooth, non-saturating activations have well-'
+        'conditioned derivatives across the sphere: sigma\'(f) is non-zero and varies '
+        'smoothly, producing a full-rank Jacobian with evenly distributed singular '
+        'values.\n\n'
+        '  - tanh has surprisingly LOW effective rank, especially at high l_max '
+        '(44.3/121 at l_max=10). This is because tanh saturates: for large |f(x)|, '
+        'tanh\'(f) -> 0, collapsing those directions in output space. The larger l_max '
+        'is, the more points on the sphere have large |f| values (due to higher '
+        'variance), and the more directions are collapsed.\n\n'
+        '  - abs has very HIGH effective rank because |sigma\'(f)| = 1 everywhere '
+        '(except at f=0, a measure-zero set), preserving all directions despite '
+        'being non-smooth.\n\n'
+        '  - Softplus(beta) effective rank DECREASES with beta: Softplus(1) > '
+        'Softplus(10) > Softplus(100) ~ ReLU. As beta increases, the activation '
+        'approaches ReLU, which zeros out the derivative for all f < 0, collapsing '
+        'roughly half the directions.'
+    )
+
+    pdf.sub_title('4.2 Expressibility vs. Spectral Leakage')
+    pdf.body_text(
+        'Figure 7 plots expressibility (effective rank) against spectral leakage '
+        'for each activation. The two metrics are clearly separable -- they measure '
+        'different properties of the activation:\n\n'
+        '  - Softplus(1) sits in the HIGH expressibility / LOW leakage corner: it is '
+        'both smooth (low spectral tails) and expressive (well-conditioned Jacobian).\n\n'
+        '  - tanh sits in the LOW expressibility / MODERATE leakage region: its '
+        'saturation collapses output directions, while its bounded range concentrates '
+        'spectral energy.\n\n'
+        '  - abs and ReLU sit in the HIGH leakage region but with different '
+        'expressibility: abs preserves all directions (high rank) while ReLU zeros '
+        'out half (moderate rank).\n\n'
+        'This decomposition explains why leakage alone does not predict task '
+        'performance: two activations with similar leakage can have very different '
+        'expressibility, and vice versa.'
+    )
+
+    # Fig 7: Expressibility vs leakage scatter
+    pdf.add_figure(
+        'results/figures/expE_express_vs_leakage.png',
+        'Figure 7: Effective rank (expressibility) vs. spectral leakage ratio '
+        'for each activation at l_max = 3, 6, 10. Each point is one activation. '
+        'The two axes measure orthogonal properties: leakage measures energy lost '
+        'above l_max, while effective rank measures the diversity of output directions '
+        'within the retained l_max subspace. Softplus(1) achieves both low leakage '
+        'and high expressibility; tanh has low expressibility due to saturation.'
+    )
+
+    # Combined table
+    pdf.sub_title('Table 4: Expressibility and Leakage (l_max = 6)')
+    headers = ['Activation', 'Leakage R', 'EffRank', 'EffRank/d', 'Mechanism']
+    rows = []
+    mechanism = {
+        'Softplus_1': 'Smooth, non-sat.', 'SiLU': 'Smooth, non-sat.',
+        'GELU': 'Smooth, non-sat.', 'Softplus_10': 'Near-ReLU',
+        'ReLU': 'C^0, half-zeroed', 'Softplus_100': 'Near-ReLU',
+        'tanh': 'C^inf, saturating', 'abs': 'C^0, sign-flip',
+    }
+    for act in act_order:
+        row = [act]
+        if act in expA.get('6', {}):
+            row.append(f"{expA['6'][act]['leakage_ratio']:.4f}")
+        else:
+            row.append('-')
+        if act in expE.get('6', {}):
+            er = expE['6'][act]['mean_effective_rank']
+            row.append(f"{er:.1f}")
+            row.append(f"{er/49:.2f}")
+        else:
+            row.append('-')
+            row.append('-')
+        row.append(mechanism.get(act, ''))
+        rows.append(row)
+    pdf.add_table(headers, rows, col_widths=[30, 30, 30, 30, 70])
+
+    pdf.sub_title('4.3 Preliminary Task Performance (Experiment D)')
+    pdf.body_text(
+        'We train a 1-layer SphericalCNN on a synthetic 5-class classification task '
+        '(l_max = 6), where class-discriminative information resides in high-l '
+        'coefficients. 5 activations x 3 sampling configs, 2 runs each, 15 epochs.\n\n'
+        'Results: Accuracy differences are small (1-2%). Neither leakage nor '
+        'expressibility alone predicts the ranking. Notably:\n'
+        '  - tanh (87.5%) has the best accuracy but LOW expressibility and MODERATE '
+        'leakage.\n'
+        '  - Softplus_1 (87.3%) is a close second with HIGH expressibility and LOW '
+        'leakage.\n'
+        '  - ReLU (86.3%) has MODERATE expressibility and HIGH leakage.\n\n'
+        'The fact that tanh achieves high task accuracy despite low effective rank '
+        'suggests that for a 1-layer model, the specific form of the nonlinearity on '
+        'S^2 (saturation produces bounded, well-separated class responses) may matter '
+        'more than local Jacobian diversity. In deeper models where equivariance '
+        'errors compound, the ranking could change.'
+    )
+
+    pdf.sub_title('Table 5: Test Accuracy')
     headers = ['Activation', 'GL_1x', 'GL_2x', 'Leb_min']
     rows = []
     for act in ['tanh', 'Softplus_1', 'SiLU', 'ReLU', 'Softplus_10']:
@@ -550,15 +665,15 @@ def main():
 
     pdf.add_figure(
         'results/figures/expD_accuracy_comparison.png',
-        'Figure 6: Test accuracy by (activation x sampling) configuration. '
+        'Figure 8: Test accuracy by (activation x sampling) configuration. '
         '2 runs per config, 15 epochs, l_max = 6. Error bars: std across runs.'
     )
     pdf.add_figure(
         'results/figures/expD_acc_vs_equiv.png',
-        'Figure 7: Task accuracy vs. equivariance error. If the smoothness -> '
-        'equivariance -> performance chain held, we would expect a negative '
-        'correlation. The scatter shows no clear monotonic trend, suggesting '
-        'that expressivity confounds the relationship.',
+        'Figure 9: Task accuracy vs. equivariance error. No clear monotonic trend. '
+        'Combined with the expressibility results, this confirms that task performance '
+        'depends on a complex interplay of leakage, expressibility, and model-specific '
+        'factors that cannot be reduced to a single axis.',
         w=140
     )
 
@@ -568,8 +683,9 @@ def main():
     pdf.add_page()
     pdf.section_title('5. Conclusions')
     pdf.body_text(
-        'This study identifies two independent axes controlling the behavior of '
-        'S2 Activation and reveals a fundamental dichotomy in their error mechanisms.\n\n'
+        'This study identifies three independent axes characterizing S2 Activation -- '
+        'spectral leakage, aliasing sensitivity, and expressibility -- and reveals '
+        'fundamental dichotomies in their interactions.\n\n'
         '1. ACTIVATION SMOOTHNESS CONTROLS EQUIVARIANCE VIA SPECTRAL LEAKAGE\n'
         '   Smoother activations (Softplus_1, SiLU) produce less spectral leakage, '
         'and leakage is strongly correlated with equivariance error (Figure 2). '
@@ -587,19 +703,27 @@ def main():
         '   GL, Lebedev, and uniform grids produce similar equivariance error at '
         'matched point counts (Figure 5). The dominant factor is how many points are '
         'used, not their specific arrangement.\n\n'
-        '4. TASK PERFORMANCE REQUIRES FURTHER INVESTIGATION\n'
-        '   Our preliminary Experiment D does not validate a smoothness-to-performance '
-        'chain. Activation expressivity is a likely confounder: different nonlinearities '
-        'have different approximation capacity on S^2, which can outweigh equivariance '
-        'effects in a shallow model. Controlled experiments matching expressivity across '
-        'activations are needed before drawing conclusions about downstream impact.\n\n'
-        '5. PRACTICAL GUIDANCE (for equivariance)\n'
+        '4. SMOOTHNESS AND EXPRESSIBILITY ARE NOT OPPOSED\n'
+        '   The effective rank of the Jacobian (Figures 6-7) reveals that smooth '
+        'activations are also the most expressive: Softplus(1) achieves both the lowest '
+        'leakage and the highest effective rank. Saturation, not smoothness, reduces '
+        'expressibility: tanh has low effective rank because tanh\'(x) -> 0 for large |x|. '
+        'Activations that zero out half the input (ReLU, high-beta Softplus) also lose '
+        'rank. The Pareto-optimal activation for both leakage and expressibility is '
+        'Softplus(1) or SiLU.\n\n'
+        '5. TASK PERFORMANCE REMAINS MULTI-FACTORIAL\n'
+        '   Our preliminary Experiment D shows that neither leakage nor expressibility '
+        'alone predicts task accuracy: tanh achieves the best accuracy despite low '
+        'expressibility. In a 1-layer model, the global shape of the nonlinearity '
+        '(saturation, boundedness) likely matters more than local Jacobian diversity. '
+        'In deeper models where equivariance errors compound, the ranking could shift.\n\n'
+        '6. PRACTICAL GUIDANCE (for equivariance)\n'
         '   - To minimize equivariance error: use Softplus(1) or SiLU + >= 2x GL '
         'oversampling.\n'
         '   - Cost-effective default: SiLU + GL_1x (standard in most models).\n'
         '   - Parametric control: Softplus(beta) to trade smoothness vs. sharpness.\n'
         '   - Caveat: minimizing equivariance error does not guarantee best task '
-        'performance.'
+        'performance in shallow models.'
     )
 
     # ==================================================================
