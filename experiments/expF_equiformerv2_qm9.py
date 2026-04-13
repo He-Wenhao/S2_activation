@@ -402,12 +402,25 @@ def run_training(args):
     run_dir = RESULTS_DIR / "runs" / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Training loop ──
+    # ── Resume from checkpoint if available ──
+    ckpt_path = run_dir / "checkpoint.pt"
+    start_epoch = 1
     best_val_mae = float("inf")
     history = []
+    if ckpt_path.exists():
+        ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+        model.load_state_dict(ckpt["model_state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+        start_epoch = ckpt["epoch"] + 1
+        best_val_mae = ckpt["best_val_mae"]
+        history = ckpt["history"]
+        log.info(f"Resumed from epoch {ckpt['epoch']}, best val MAE {best_val_mae:.5f}")
+
+    # ── Training loop ──
     t0 = time.time()
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, args.epochs + 1):
         train_mae = train_one_epoch(model, train_loader, optimizer, target_idx, device)
         val_mae = evaluate(model, val_loader, target_idx, device)
         scheduler.step()
@@ -423,6 +436,16 @@ def run_training(args):
             "val_mae": val_mae,
             "lr": optimizer.param_groups[0]["lr"],
         })
+
+        # Save resumable checkpoint every epoch
+        torch.save({
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "best_val_mae": best_val_mae,
+            "history": history,
+        }, ckpt_path)
 
         if epoch % 10 == 0 or epoch == 1:
             log.info(

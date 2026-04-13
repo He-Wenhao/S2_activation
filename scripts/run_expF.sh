@@ -2,7 +2,7 @@
 #SBATCH -A m3706_g
 #SBATCH -C gpu
 #SBATCH -q regular
-#SBATCH -t 02:00:00
+#SBATCH -t 06:00:00
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=1
@@ -49,6 +49,18 @@ fi
 echo "Host: $(hostname)"
 echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'N/A')"
 echo "Start: $(date)"
+
+# Check if already completed
+ACT=$(echo "$ARGS" | grep -oP '(?<=--act )\S+')
+GRID=$(echo "$ARGS" | grep -oP '(?<=--grid )\S+')
+TARGET=$(echo "$ARGS" | grep -oP '(?<=--target )\S+')
+SEED=$(echo "$ARGS" | grep -oP '(?<=--seed )\S+')
+RESULT_DIR="results/expF/runs/${ACT}_${GRID}_${TARGET}_seed${SEED}"
+
+if [ -f "${RESULT_DIR}/results.json" ]; then
+    echo "Already completed: ${RESULT_DIR}/results.json exists. Skipping."
+    exit 0
+fi
 
 srun python experiments/expF_equiformerv2_qm9.py train ${ARGS}
 

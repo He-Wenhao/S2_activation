@@ -22,18 +22,19 @@
 \begin{abstract}
 S2 Activation---the standard nonlinearity in SO(3)-equivariant networks---applies a
 pointwise activation on the sphere via spherical harmonic (SH) expansion, truncation to
-$\ell_{\max}$, and finite quadrature. We present a systematic numerical study decomposing
-its errors along two orthogonal axes: \emph{activation choice} and \emph{quadrature strategy}.
+$\ell_{\max}$, and finite quadrature. We present a systematic study decomposing
+its errors along two axes: \emph{activation choice} and \emph{quadrature strategy}.
 We identify a fundamental \emph{truncation--aliasing dichotomy}: coefficient error is
 dominated by truncation (insensitive to oversampling), while equivariance error is dominated
-by aliasing (reduced $10$--$450\times$ by $3\times$ oversampling). Both axes are governed by
-spectral leakage, which is strongly correlated with equivariance violation. We further
-introduce a Jacobian-based isotropy metric to characterize how uniformly each activation
-explores output coefficient space, finding that smooth non-saturating activations
-(Softplus(1), SiLU) achieve both low leakage and high isotropy under GL$_{1\times}$
-quadrature. Preliminary task experiments show that neither leakage nor isotropy alone
-predicts downstream accuracy, highlighting the multi-factorial nature of activation
-selection.
+by aliasing (reduced $10$--$450\times$ by $3\times$ oversampling). Controlled experiments
+on EquiformerV2/QM9 (6 activations, 5 seeds each) reveal a surprising
+\emph{smoothness--expressiveness tradeoff}: the Spearman correlation between theoretical
+equivariance error and downstream MAE is $\rho = -0.94$ ($p = 0.005$)---less equivariant
+activations perform \emph{better}. We trace this to Jacobian throughput: the nuclear norm
+(total singular-value mass), not effective rank, predicts task performance
+($\rho = -0.94$). Analysis of per-layer equivariance error reveals a two-phase pattern---an
+$8$--$16\times$ jump from layer~0 to 1, then a plateau---explained by the transition
+from indirect to direct cross-degree contamination in the transformer architecture.
 \end{abstract}
 
 %========================================================================
@@ -60,6 +61,12 @@ decomposition of the error sources has been lacking. In this paper we:
   \item Introduce a \textbf{Jacobian isotropy} metric that measures how uniformly
     S2 Activation explores output directions, and show it is orthogonal to leakage
     (\S\ref{sec:isotropy}).
+  \item Reveal a \textbf{smoothness--expressiveness tradeoff} on EquiformerV2/QM9:
+    less equivariant activations achieve better task performance, explained by Jacobian
+    throughput rather than isotropy (\S\ref{sec:task}--\ref{sec:tradeoff}).
+  \item Characterize \textbf{per-layer error dynamics} in deep equivariant architectures,
+    showing a two-phase accumulation pattern driven by cross-degree coupling
+    (\S\ref{sec:perlayer}).
 \end{enumerate}
 
 %========================================================================
@@ -327,59 +334,273 @@ high isotropy but high leakage.
 \end{figure*}
 
 %========================================================================
-\section{Pilot: Downstream Task Performance}
+\section{Downstream Task: EquiformerV2 on QM9}
 \label{sec:task}
 %========================================================================
 
-We train a 1-layer SphericalCNN on a synthetic 5-class classification task
-($\ell_{\max}{=}6$, class-discriminative signal in high-$\ell$ coefficients).
-5 activations $\times$ 3 sampling configs, 2 runs each, 15 epochs.
+We test whether the theoretical findings (leakage, equivariance, isotropy) transfer to
+a real molecular property-prediction task by swapping the S2 Activation nonlinearity
+inside EquiformerV2~\citep{equiformerv2} trained on QM9~\citep{qm9} (U0 target).
+
+\paragraph{Setup.}
+We modify EquiformerV2's \texttt{SeparableS2Activation} modules (8 per model) to use each
+of 6 activations: SiLU, Softplus($\beta{=}1$), Softplus($\beta{=}10$), tanh, ReLU, and
+$|\cdot|$. Architecture: 4 transformer blocks, $\ell_{\max}{=}4$, 64 sphere channels,
+5.2M parameters. Training: AdamW, lr $= 2{\times}10^{-4}$, cosine annealing, 50 epochs,
+5 seeds per configuration. We also test SiLU with $2\times$ grid oversampling.
+After training, we measure prediction invariance error
+$E_{\mathrm{inv}} = |y(x) - y(R \cdot x)| / |y(x)|$ over random rotations.
 
 \paragraph{Results.}
-Accuracy differences are small ($\sim$1--2\%): tanh 87.5\%, Softplus(1) 87.3\%,
-SiLU 86.3\%, ReLU 86.3\%, Softplus(10) 86.0\% (GL$_{1\times}$). Neither leakage nor
-Jacobian isotropy alone predicts this ranking. In particular, tanh achieves the highest
-accuracy despite having \emph{low} isotropy and \emph{moderate} leakage, while
-Softplus(1)---which is Pareto-optimal on both axes---is a close second. With only $n{=}2$
-runs per configuration and $\sim$1\% accuracy gaps, these differences are not
-statistically significant; we present them as pilot evidence only.
+Table~\ref{tab:qm9} reports test MAE and prediction invariance error. Surprisingly,
+the activation ranking by MAE does \emph{not} follow the equivariance ranking.
+Tanh achieves the best MAE (4.42$\pm$0.52~meV) despite having moderate equivariance error,
+while Softplus(1)---which has the \emph{lowest} equivariance error (4.9$\times10^{-6}$)---achieves
+the \emph{worst} MAE (5.14$\pm$0.52~meV).
 
-The disconnect suggests that for a 1-layer model, the global shape of the nonlinearity
-(saturation produces bounded, well-separated class responses) may matter more than local
-Jacobian diversity. In deeper architectures where equivariance errors compound across
-layers, the activation ranking could shift.
+\begin{table}[t]
+  \caption{EquiformerV2 on QM9 (U0 target, default grid). 5 seeds per activation.}
+  \label{tab:qm9}
+  \centering
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    Activation & MAE (meV) & $E_{\mathrm{inv}}$ & Leakage $R$ \\
+    \midrule
+    tanh           & $\mathbf{4.42 \pm 0.52}$ & $2.0{\times}10^{-5}$ & 0.094 \\
+    $|\cdot|$      & $4.53 \pm 0.50$ & $4.8{\times}10^{-5}$ & 0.160 \\
+    SiLU           & $4.68 \pm 0.63$ & $1.3{\times}10^{-5}$ & 0.108 \\
+    ReLU           & $4.76 \pm 0.39$ & $2.6{\times}10^{-5}$ & 0.090 \\
+    Softplus(10)   & $4.79 \pm 0.33$ & $2.4{\times}10^{-5}$ & 0.089 \\
+    Softplus(1)    & $5.14 \pm 0.52$ & $4.9{\times}10^{-6}$ & 0.035 \\
+    \midrule
+    SiLU ($2\times$) & $4.51 \pm 0.23$ & $7.2{\times}10^{-8}$ & --- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Oversampling confirms the aliasing mechanism.}
+SiLU with $2\times$ grid oversampling reduces equivariance error by $180\times$
+($7.2{\times}10^{-8}$ vs.\ $1.3{\times}10^{-5}$) and improves MAE from 4.68 to 4.51~meV
+with lower variance ($\pm$0.23 vs.\ $\pm$0.63), confirming that aliasing-induced
+equivariance violations from \S\ref{sec:sampling} are measurable in trained models.
+
+\paragraph{Cross-experiment correlations.}
+We correlate the theoretical metrics from Experiments A, C, and E with downstream
+performance (Figure~\ref{fig:leakage_vs_mae}).
+Strikingly, the Spearman correlation between
+theoretical equivariance error (Exp~C, GL$_{1\times}$, $\ell_{\max}{=}6$) and downstream
+MAE is $\rho = -0.94$ ($p = 0.005$): activations with \emph{higher} theoretical equivariance
+error achieve \emph{better} downstream MAE. Spectral leakage shows the same
+anti-correlation ($\rho = -0.83$, $p = 0.04$). In contrast, effective rank shows no
+significant correlation with MAE ($\rho = +0.26$, $p = 0.62$), nor does the downstream
+equivariance error itself ($\rho = -0.37$, $p = 0.47$).
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.85\textwidth]{fig10_leakage_vs_mae.png}
+  \caption{Spectral leakage ratio $R$ (Exp~A) vs.\ downstream test MAE (Exp~F).
+  Lower leakage (smoother activation) correlates with \emph{worse} task performance
+  ($\rho = -0.83$, $p = 0.04$), revealing a smoothness--expressiveness tradeoff.}
+  \label{fig:leakage_vs_mae}
+\end{figure*}
+
+%========================================================================
+\section{Per-Layer Equivariance Error Accumulation}
+\label{sec:perlayer}
+%========================================================================
+
+We measure the $\ell{=}0$ invariance error at the output of each of the 4 transformer
+blocks in EquiformerV2, revealing a characteristic two-phase pattern
+(Table~\ref{tab:perlayer}).
+
+\begin{table}[t]
+  \caption{Per-layer $\ell{=}0$ invariance error (mean over 5 seeds, default grid).}
+  \label{tab:perlayer}
+  \centering
+  \small
+  \begin{tabular}{lcccc c}
+    \toprule
+    Activation & L0 & L1 & L2 & L3 & L0$\to$L1 \\
+    \midrule
+    Softplus(1)    & $1.3{\times}10^{-5}$ & $1.2{\times}10^{-4}$ & $1.8{\times}10^{-4}$ & $2.3{\times}10^{-4}$ & $8.8\times$ \\
+    SiLU           & $4.6{\times}10^{-5}$ & $5.7{\times}10^{-4}$ & $5.5{\times}10^{-4}$ & $6.5{\times}10^{-4}$ & $12.4\times$ \\
+    tanh           & $7.6{\times}10^{-5}$ & $1.2{\times}10^{-3}$ & $1.1{\times}10^{-3}$ & $9.8{\times}10^{-4}$ & $15.7\times$ \\
+    Softplus(10)   & $3.3{\times}10^{-4}$ & $1.1{\times}10^{-3}$ & $1.0{\times}10^{-3}$ & $1.1{\times}10^{-3}$ & $3.3\times$ \\
+    ReLU           & $7.7{\times}10^{-4}$ & $1.1{\times}10^{-3}$ & $1.1{\times}10^{-3}$ & $1.1{\times}10^{-3}$ & $1.5\times$ \\
+    $|\cdot|$      & $1.8{\times}10^{-3}$ & $3.3{\times}10^{-3}$ & $2.4{\times}10^{-3}$ & $1.6{\times}10^{-3}$ & $1.9\times$ \\
+    \midrule
+    SiLU ($2\times$)  & $3.8{\times}10^{-7}$ & $3.0{\times}10^{-6}$ & $3.7{\times}10^{-6}$ & $4.2{\times}10^{-6}$ & $7.8\times$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Phase 1: large jump from layer 0 to layer 1.}
+The $\ell{=}0$ error increases $1.5$--$15.7\times$ between layers 0 and 1. This reflects
+a transition from \emph{indirect} to \emph{direct} contamination. In EquiformerV2's
+\texttt{SeparableS2Activation}, the $\ell{=}0$ output is computed from a scalar gating
+branch that does not pass through the S2 grid---it has \emph{zero} intrinsic quadrature
+error. At layer~0, the $\ell{=}0$ error arises only through indirect coupling:
+RMSNorm computes a normalization factor from \emph{all} degrees (including corrupted
+$\ell{>}0$ components), and the SO(2) convolution's $m{=}0$ linear layer mixes
+$\ell{=}0$ with $\ell{>}0$ coefficients. These are second-order effects.
+
+At layer~1, however, the \emph{input} representation already carries $\ell{>}0$ corruption
+from layer~0. The attention mechanism aggregates neighbor features---including their
+corrupted $\ell{>}0$ components---to generate new $\ell{=}0$ values via learned linear
+projections. This is a \emph{first-order} contamination path, explaining the order-of-magnitude
+jump.
+
+\paragraph{Phase 2: plateau at layers 2--3.}
+After the initial jump, the error stabilizes or even decreases slightly. Three mechanisms
+explain this: (1)~\emph{Residual connections} add a fresh perturbation to the existing
+error at each layer, so the relative error $\|e\|/\|x\|$ saturates once the per-layer
+increment is comparable to the accumulated error. (2)~\emph{RMSNorm} rescales embeddings
+to approximately unit norm at each layer entry, preventing unbounded error growth.
+(3)~The spectral character of the error signal reaches a \emph{steady state}: after
+several S2 activations, the ``error spectrum'' matches the representation spectrum,
+so each layer's corruption adds at a fixed ratio.
+
+\paragraph{The ratio correlates with smoothness.}
+Smooth activations (SiLU, tanh, Softplus(1)) have small layer~0 errors but large
+L0$\to$L1 ratios (8--16$\times$), because their indirect coupling at layer~0 is weak
+but the direct path at layer~1 is equally strong for all activations. Non-smooth
+activations (ReLU, $|\cdot|$) already have large layer~0 errors from strong indirect
+coupling, so the ratio to layer~1 is smaller (1.5--1.9$\times$).
+
+Notably, $|\cdot|$ is the only activation where the error \emph{decreases} at layers
+2--3 (ratios 0.73$\times$ and 0.68$\times$). Since $|x|$ is an even function, it
+projects all odd-$\ell$ components to zero, progressively suppressing both the signal
+and its error in higher degrees.
+
+%========================================================================
+\section{The Smoothness--Expressiveness Tradeoff}
+\label{sec:tradeoff}
+%========================================================================
+
+The anti-correlation between leakage and downstream MAE (\S\ref{sec:task}) suggests a
+fundamental tradeoff: smoother activations preserve equivariance but sacrifice
+\emph{expressiveness}---the ability to generate diverse, informative nonlinear
+transformations. We formalize this tradeoff by analyzing the Jacobian $J$ of S2 Activation
+along multiple axes.
+
+\paragraph{Why effective rank fails as an expressiveness metric.}
+Section~\ref{sec:isotropy} showed that the Jacobian effective rank measures how uniformly
+singular values are distributed, but ignores their \emph{magnitude}. A Jacobian
+$\varepsilon I$ has maximal effective rank but negligible throughput. Indeed, effective rank
+has no correlation with downstream MAE ($\rho = +0.26$, $p = 0.62$).
+
+\paragraph{Expressiveness metrics.}
+We compute additional Jacobian properties at $\ell_{\max}{=}6$ (50 random inputs):
+
+\begin{itemize}
+  \item \textbf{Nuclear norm} $\|J\|_* = \sum_i s_i$: total signal throughput.
+  \item \textbf{Frobenius norm} $\|J\|_F = (\sum_i s_i^2)^{1/2}$: energy throughput.
+  \item \textbf{Log-determinant} $\log|\det J| = \sum_i \log s_i$: information-theoretic
+    volume preserved by the mapping.
+  \item \textbf{Condition number} $\kappa = s_1/s_d$: ratio of strongest to weakest
+    direction.
+\end{itemize}
+
+Table~\ref{tab:jacobian} reports these metrics alongside the downstream MAE ranking.
+
+\begin{table}[t]
+  \caption{Jacobian metrics ($\ell_{\max}{=}6$, GL$_{1\times}$) and downstream MAE.
+  Nuclear norm is the best single predictor of task performance.}
+  \label{tab:jacobian}
+  \centering
+  \small
+  \begin{tabular}{lccccc}
+    \toprule
+    Activation & $\|J\|_*$ & $\|J\|_F$ & $\log|\det J|$ & EffRank & MAE \\
+    \midrule
+    tanh       & \textbf{20.0} & \textbf{3.56} & $\mathbf{-66}$ & 25.6 & \textbf{4.42} \\
+    $|\cdot|$  & 12.8 & 1.97 & $-75$ & 39.6 & 4.53 \\
+    SiLU       & 12.6 & 2.22 & $-94$ & 27.7 & 4.68 \\
+    ReLU       & 12.0 & 2.19 & $-177$ & 26.6 & 4.76 \\
+    Softplus(10) & 12.0 & 2.17 & $-124$ & 27.1 & 4.79 \\
+    Softplus(1) & 11.6 & 1.87 & $-80$ & 33.5 & 5.14 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Nuclear norm predicts task performance.}
+The Spearman correlation between nuclear norm and MAE is $\rho = -0.94$ ($p = 0.005$):
+higher total throughput predicts lower (better) MAE. Frobenius norm shows a similar trend
+($\rho = -0.66$). Log-determinant has a moderate monotonic relationship
+($\rho = -0.60$). Condition number and effective rank are uncorrelated with MAE.
+
+\paragraph{Tanh occupies the sweet spot.}
+Tanh has the highest nuclear norm (20.0), highest Frobenius norm (3.56), and the least
+negative log-determinant ($-66$), while having only moderate leakage and moderate effective
+rank. Its saturation at large arguments provides strong nonlinearity (high throughput)
+while maintaining a well-conditioned mapping. In contrast, Softplus(1) has the
+best-conditioned Jacobian ($\kappa = 17$) and second-highest effective rank, but
+its smoothness yields the lowest nuclear norm (11.6)---too little nonlinear signal for the
+network to learn from.
+
+\paragraph{The tradeoff is not leakage vs.\ isotropy.}
+The earlier analysis (\S\ref{sec:isotropy}) framed the activation choice as a tradeoff
+between leakage (equivariance) and isotropy (expressiveness). The downstream results
+reveal a different picture: the relevant expressiveness axis is not the \emph{dimensionality}
+of the Jacobian (effective rank) but its \emph{magnitude} (nuclear/Frobenius norm).
+Spectral leakage correlates with Jacobian magnitude because non-smooth activations
+generate stronger nonlinear transformations, which inevitably produce more high-frequency
+content. The smoothness--expressiveness tradeoff is thus:
+\begin{quote}
+\emph{Smoother activations preserve equivariance by suppressing high-frequency generation,
+but this same suppression reduces the nonlinear signal throughput that drives learning.}
+\end{quote}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig11_tradeoff_summary.png}
+  \caption{The smoothness--expressiveness tradeoff. Left: leakage ratio vs.\
+  $\log|\det J|$, colored by downstream MAE. Right: leakage ratio vs.\ stable rank.
+  The best-performing activation (tanh) balances moderate leakage with high information
+  throughput.}
+  \label{fig:tradeoff}
+\end{figure*}
 
 %========================================================================
 \section{Conclusions}
 \label{sec:conclusions}
 %========================================================================
 
-We identify three orthogonal axes characterizing S2 Activation:
+We identify four axes characterizing S2 Activation and their downstream consequences:
 
 \textbf{1.\ Smoothness $\to$ leakage $\to$ equivariance.}
 Smoother activations produce less spectral leakage, which is strongly correlated with
 equivariance error. The Softplus($\beta$) family provides continuous parametric control.
+Oversampling ($2\times$ GL) reduces equivariance error by $180\times$ in trained
+EquiformerV2 models, confirming the aliasing mechanism.
 
 \textbf{2.\ Truncation--aliasing dichotomy.}
 Coefficient error is truncation-dominated (sampling-insensitive); equivariance error is
 aliasing-dominated (sampling-sensitive). This is because truncation commutes with rotation
 while aliasing does not.
 
-\textbf{3.\ Isotropy is orthogonal to leakage.}
-Under GL$_{1\times}$ discretization, the Jacobian effective rank reveals that smooth
-non-saturating activations (Softplus(1), SiLU) are also the most isotropic, while
-saturating (tanh) or half-zeroing (ReLU) activations lose directions. This provides a
-second axis for characterizing activations beyond smoothness alone.
+\textbf{3.\ Per-layer error dynamics follow a two-phase pattern.}
+Equivariance error jumps $8$--$16\times$ from layer~0 to layer~1 as indirect contamination
+(via normalization and SO(2) cross-degree coupling) gives way to direct contamination
+(via attention-based message passing with corrupted features). Residual connections and
+RMSNorm stabilize the error thereafter.
 
-\textbf{4.\ Task performance remains open.}
-Pilot experiments show that neither leakage nor isotropy alone predicts downstream
-accuracy. Controlled studies matching model capacity across activations, and evaluation
-on deeper architectures, are needed.
+\textbf{4.\ The smoothness--expressiveness tradeoff.}
+Minimizing equivariance error does \emph{not} optimize downstream task performance.
+The Spearman correlation between theoretical equivariance error and test MAE is
+$\rho = -0.94$: less equivariant activations perform \emph{better}.
+The relevant expressiveness metric is not Jacobian isotropy (effective rank) but
+Jacobian \emph{throughput} (nuclear norm, $\rho = -0.94$ with MAE). Smooth activations
+suppress the high-frequency nonlinear coupling that drives learning, revealing a
+fundamental tension between equivariance preservation and expressive power.
 
-\paragraph{Practical guidance (for equivariance).}
-Softplus(1) or SiLU with $\ge 2\times$ GL oversampling minimizes equivariance error.
-The cost-effective default is SiLU + GL$_{1\times}$. Minimizing equivariance error does not
-guarantee best task performance in shallow models.
+\paragraph{Practical guidance.}
+For maximizing equivariance: Softplus(1) or SiLU with $\ge 2\times$ oversampling.
+For maximizing task performance on QM9: tanh, which achieves the best balance of
+nonlinear throughput and moderate equivariance. The optimal activation depends on the
+task's sensitivity to equivariance vs.\ expressiveness---a tradeoff that merits
+further study across architectures and datasets.
 
 \bibliography{references}
 \bibliographystyle{abbrvnat}
@@ -393,16 +614,25 @@ guarantee best task performance in shallow models.
 \begin{figure*}[h]
   \centering
   \includegraphics[width=\textwidth]{fig8_task_acc.png}
-  \caption{Test accuracy by (activation $\times$ sampling) configuration.
-  2 runs per config, 15 epochs, $\ell_{\max}{=}6$.}
+  \caption{Synthetic task (Exp~D): test accuracy by (activation $\times$ sampling)
+  configuration. 2 runs per config, 15 epochs, $\ell_{\max}{=}6$.}
   \label{fig:task_acc}
 \end{figure*}
 
 \begin{figure*}[h]
   \centering
   \includegraphics[width=0.85\textwidth]{fig9_acc_vs_equiv.png}
-  \caption{Task accuracy vs.\ equivariance error. No clear monotonic trend.}
+  \caption{Synthetic task accuracy vs.\ equivariance error. No clear monotonic trend.}
   \label{fig:acc_vs_equiv}
+\end{figure*}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics[width=\textwidth]{fig12_mae_vs_metrics.png}
+  \caption{Downstream QM9 MAE vs.\ each Jacobian metric. Nuclear norm and Frobenius norm
+  are the strongest predictors; effective rank and condition number show no significant
+  correlation.}
+  \label{fig:mae_vs_metrics}
 \end{figure*}
 
 \end{document}
