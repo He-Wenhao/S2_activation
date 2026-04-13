@@ -12,3 +12,4 @@ __pycache__/
 # Data and model checkpoints
 data/
 *.pt
+logs/
