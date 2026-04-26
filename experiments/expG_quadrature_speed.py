@@ -62,8 +62,8 @@ def time_fn(fn, n_warmup=3, n_iter=20):
 def bench_s2act_alone(grid, batch_size=1024, n_channels=64, lmax=4, mmax=2,
                        device="cuda"):
     """Time the to-grid → SiLU → from-grid pipeline in isolation."""
-    # Number of (l, m) coefficients with l <= lmax, |m| <= mmax
-    n_coeffs = sum(min(2 * l + 1, 2 * mmax + 1) for l in range(lmax + 1))
+    # Use the actual coefficient dim from the grid matrix to avoid mismatch
+    n_coeffs = grid.get_to_grid_mat(device=None).shape[-1]
 
     x = torch.randn(batch_size, n_coeffs, n_channels, device=device,
                      requires_grad=True)
@@ -90,7 +90,8 @@ def bench_s2act_alone(grid, batch_size=1024, n_channels=64, lmax=4, mmax=2,
 
 # ─── Benchmark 2/3: Full EquiformerV2 forward / backward ───────────────────
 
-def bench_full_model(grid_config, batch_size=64, n_iter=20, device="cuda"):
+def bench_full_model(grid_config, batch_size=64, n_iter=20, device="cuda",
+                      skip_train=False):
     """
     Time full EquiformerV2 forward (and forward+backward+step) on real QM9.
 
@@ -102,6 +103,7 @@ def bench_full_model(grid_config, batch_size=64, n_iter=20, device="cuda"):
         backbone_kwargs["grid_resolution"] = grid_config["resolution"]
     model = QM9Model(backbone_kwargs).to(device)
     patch_s2_activations(model, "SiLU")
+    n_params = sum(p.numel() for p in model.parameters())
 
     if grid_config["method"] == "gl":
         n_replaced = patch_so3_grid(
@@ -137,25 +139,33 @@ def bench_full_model(grid_config, batch_size=64, n_iter=20, device="cuda"):
     fwd_ms, fwd_std = time_fn(fwd_only, n_warmup=5, n_iter=n_iter)
 
     # Forward + backward + optimizer step (training mode)
-    model.train()
+    if skip_train:
+        train_ms, train_std = float("nan"), float("nan")
+    else:
+        model.train()
 
-    def fwd_bwd_step():
-        b = batches[iter_idx[0] % len(batches)]
-        optimizer.zero_grad()
-        y = model(b)
-        loss = (y.squeeze() - b.y[:, target_idx]).pow(2).mean()
-        loss.backward()
-        optimizer.step()
-        iter_idx[0] += 1
+        def fwd_bwd_step():
+            b = batches[iter_idx[0] % len(batches)]
+            optimizer.zero_grad()
+            y = model(b)
+            loss = (y.squeeze() - b.y[:, target_idx]).pow(2).mean()
+            loss.backward()
+            optimizer.step()
+            iter_idx[0] += 1
 
-    train_ms, train_std = time_fn(fwd_bwd_step, n_warmup=5, n_iter=n_iter)
+        train_ms, train_std = time_fn(fwd_bwd_step, n_warmup=5, n_iter=n_iter)
 
-    return {
+    result = {
         "forward_ms": fwd_ms,
         "forward_std": fwd_std,
         "train_step_ms": train_ms,
         "train_step_std": train_std,
+        "n_params": n_params,
     }
+    # Free GPU memory before next config
+    del model, optimizer, batches
+    torch.cuda.empty_cache()
+    return result
 
 
 # ─── Main ──────────────────────────────────────────────────────────────────
@@ -166,6 +176,12 @@ def main():
     p.add_argument("--n_iter", type=int, default=20)
     p.add_argument("--out", type=str,
                     default="results/expG_quadrature/speed_benchmark.json")
+    p.add_argument("--config", choices=["small", "fairchem_default"],
+                    default="small",
+                    help="small = 4 layers/64ch/lmax4 (our QM9 setup), "
+                         "fairchem_default = 12 layers/128ch/lmax6 (OC20-scale)")
+    p.add_argument("--no_train", action="store_true",
+                    help="Skip training-step benchmark (memory-saving)")
     args = p.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -173,7 +189,20 @@ def main():
     if torch.cuda.is_available():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
 
-    LMAX, MMAX = 4, 2
+    if args.config == "fairchem_default":
+        # fairchem EquiformerV2 defaults (OC20-scale)
+        BACKBONE_DEFAULTS["num_layers"] = 12
+        BACKBONE_DEFAULTS["sphere_channels"] = 128
+        BACKBONE_DEFAULTS["attn_hidden_channels"] = 128
+        BACKBONE_DEFAULTS["ffn_hidden_channels"] = 256
+        BACKBONE_DEFAULTS["num_heads"] = 8
+        BACKBONE_DEFAULTS["lmax_list"] = [6]
+        BACKBONE_DEFAULTS["mmax_list"] = [2]
+        LMAX, MMAX = 6, 2
+        print(f"Config: fairchem_default (12 layers, 128ch, lmax={LMAX}, mmax={MMAX})")
+    else:
+        LMAX, MMAX = 4, 2
+        print(f"Config: small (4 layers, 64ch, lmax={LMAX}, mmax={MMAX})")
 
     # Configurations to benchmark
     configs = [
@@ -187,6 +216,8 @@ def main():
     results = {"device": str(device), "batch_size": args.batch_size,
                "n_iter": args.n_iter, "configs": []}
 
+    n_channels_bench = BACKBONE_DEFAULTS["sphere_channels"]
+
     print("\n=== Benchmark 1: S2 Activation alone ===")
     print(f"{'Config':<14s} {'Pts':>5s} {'Fwd (ms)':>10s} {'Fwd+Bwd (ms)':>14s}")
     print("-" * 50)
@@ -199,7 +230,9 @@ def main():
                                   n_alpha=cfg.get("n_alpha"))
         npts = grid.get_to_grid_mat(device=None).shape[0] * \
                grid.get_to_grid_mat(device=None).shape[1]
-        fwd, fb = bench_s2act_alone(grid, batch_size=1024, device=device)
+        fwd, fb = bench_s2act_alone(grid, batch_size=1024,
+                                     n_channels=n_channels_bench,
+                                     lmax=LMAX, mmax=MMAX, device=device)
         print(f"{label:<14s} {npts:>5d} {fwd:>10.3f} {fb:>14.3f}")
         results["configs"].append({
             "label": label, "config": cfg, "n_beta": n_b, "n_alpha": n_a,
@@ -210,11 +243,14 @@ def main():
     print(f"{'Config':<14s} {'Pts':>5s} {'Fwd (ms)':>10s} {'Train step (ms)':>17s}")
     print("-" * 55)
     for i, (label, cfg, n_b, n_a) in enumerate(configs):
+        # Free memory between configs
+        torch.cuda.empty_cache()
         r = bench_full_model(cfg, batch_size=args.batch_size, n_iter=args.n_iter,
-                              device=device)
+                              device=device, skip_train=args.no_train)
         results["configs"][i].update(r)
         print(f"{label:<14s} {results['configs'][i]['n_points']:>5d} "
               f"{r['forward_ms']:>10.3f} {r['train_step_ms']:>17.3f}")
+        torch.cuda.empty_cache()
 
     # Speedup analysis vs DH default
     base = results["configs"][0]

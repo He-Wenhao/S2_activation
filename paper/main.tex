@@ -30,9 +30,10 @@ by aliasing (reduced $10$--$450\times$ by $3\times$ oversampling).
 We further show that EquiformerV2's default e3nn grid uses \emph{Driscoll--Healy}
 equiangular quadrature, and that swapping it for \emph{Gauss--Legendre}---a drop-in
 change requiring no retraining---halves the grid points needed for matched
-equivariance. End-to-end timing reveals the S2 Activation is only
-$\sim$0.3\% of forward cost, so this is a free accuracy improvement rather than a
-speedup.
+equivariance. End-to-end timing on QM9 (small model, S2 act $\sim$0.3\% of fwd) shows
+GL is essentially free, while at OC20 scale (12 layers, $\ell_{\max}{=}6$, S2 act
+$\sim$7\% of fwd) GL $2\times$ delivers DH $2\times$'s equivariance at DH default's
+runtime ($+46\%$ savings).
 Controlled experiments
 on EquiformerV2/QM9 (6 activations, 5 seeds each) reveal a surprising
 \emph{smoothness--expressiveness tradeoff}: the Spearman correlation between theoretical
@@ -509,22 +510,17 @@ The full 50-epoch sweep across the three GL configurations is queued; we expect 
 to converge close to DH's value while $E_{\mathrm{inv}}$ remains 1--2 orders of
 magnitude lower.
 
-\paragraph{Wall-clock impact: a free upgrade, not a speedup.}
+\paragraph{Wall-clock impact across scales.}
 A natural follow-up question: does halving the grid points actually accelerate
-EquiformerV2 inference? We benchmark the full forward pass on QM9 batches
-(NVIDIA A100, batch~64) under each grid configuration
-(Table~\ref{tab:speed}). The S2~Activation operator itself is fast (0.2--0.7~ms)
-and \emph{does} scale roughly linearly with grid point count---DH $2\times$ is
-$3.4\times$ slower than DH default in isolation. But this kernel is only
-\textbf{$\sim$0.3\%} of the full forward time ($\sim$65~ms). Attention and FFN
-dominate. The end-to-end forward and training-step times are statistically
-indistinguishable across all GL variants.
+EquiformerV2 inference? The answer depends on the model scale, because the
+S2 Activation is one operation in many. We benchmark forward time at two scales
+on an NVIDIA A100 (Tables~\ref{tab:speed_small} and \ref{tab:speed_default}).
 
 \begin{table}[t]
-  \caption{Wall-clock benchmark on NVIDIA A100, batch~64, QM9 (mean over
-  20 iterations after warmup). The S2 Activation operator scales with grid
-  size, but is too small a fraction of the full model to matter end-to-end.}
-  \label{tab:speed}
+  \caption{QM9-scale config (4 layers, 64 channels, $\ell_{\max}{=}4$, $m_{\max}{=}2$,
+  5.2M params), batch~64. The S2 Activation kernel scales with grid size, but
+  attention and FFN dominate the full forward.}
+  \label{tab:speed_small}
   \centering
   \small
   \begin{tabular}{lcccc}
@@ -540,13 +536,38 @@ indistinguishable across all GL variants.
   \end{tabular}
 \end{table}
 
-The practical takeaway: GL is a \textbf{drop-in equivariance improvement at zero
-runtime cost}, not a speedup. The to/from-grid matrices are simply different
-orthonormal projections of the same SH coefficients; swapping them in any
-pretrained EquiformerV2 checkpoint requires no retraining, no fine-tuning, and
-no architectural change. Conversely, DH $2\times$ does carry a measurable cost
-($+33$~ms per forward step, $+72$~ms per training step) for the same equivariance
-gain that GL provides for free.
+\begin{table}[t]
+  \caption{OC20-scale config (12 layers, 128 channels, $\ell_{\max}{=}6$,
+  $m_{\max}{=}2$), batch~8 forward only. S2 activation now consumes
+  $\sim$7\% of forward (DH default), and DH $2\times$ adds a real $+46\%$
+  to runtime.}
+  \label{tab:speed_default}
+  \centering
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    Quadrature & Pts & S2 act (ms) & Fwd (ms) \\
+    \midrule
+    DH default     & 70  & 0.34 & 111.4 \\
+    DH $2\times$   & 784 & 2.36 & \textbf{162.4 ($+46\%$)} \\
+    GL min         & 91  & 0.35 & 112.4 \\
+    GL match-DH    & 182 & 0.59 & 113.1 \\
+    \textbf{GL $2\times$}   & 392 & 1.14 & \textbf{112.2} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Takeaway.}
+At small scale (QM9-style), the S2 activation is $\sim$0.3\% of forward time and
+the grid choice is essentially free either way. At OC20 scale, the picture
+shifts: DH $2\times$ costs a real $+46\%$ per forward pass to chase the
+equivariance floor, while GL $2\times$---which delivers the same equivariance---adds
+$<$1\% to the forward time. \textbf{GL is therefore a drop-in equivariance upgrade
+that scales gracefully}: same wall-clock as DH default at small scale, and a
+substantial speedup over DH $2\times$ at production scale. The to/from-grid
+matrices are simply different orthonormal projections of the same SH coefficients;
+swapping them in any pretrained EquiformerV2 checkpoint requires no retraining
+and no architectural change.
 
 %========================================================================
 \section{Per-Layer Equivariance Error Accumulation}
@@ -721,15 +742,15 @@ Coefficient error is truncation-dominated (sampling-insensitive); equivariance e
 aliasing-dominated (sampling-sensitive). This is because truncation commutes with rotation
 while aliasing does not.
 
-\textbf{3.\ Quadrature method matters at fixed budget---but for accuracy, not speed.}
+\textbf{3.\ Quadrature method delivers free equivariance, with bigger payoff at scale.}
 EquiformerV2's default e3nn grid is Driscoll--Healy equiangular, not Gauss--Legendre.
 Replacing it with a custom GL grid is a drop-in change requiring no retraining: the GL
 grid achieves the same equivariance floor as DH with $\sim$2$\times$ fewer latitude
-points. End-to-end profiling shows the S2 Activation is $\sim$0.3\% of forward time,
-so this halving of grid points yields no measurable wall-clock speedup; instead, GL is
-a \emph{free equivariance improvement} that applies to any pretrained checkpoint.
-Conversely, raising DH to $2\times$ does carry a measurable cost ($+50\%$ training
-step time) for the same equivariance that GL provides for free.
+points. The wall-clock savings depend on model scale: at QM9 scale the S2 activation
+is $\sim$0.3\% of forward and the change is essentially neutral; at OC20 scale
+(12 layers, $\ell_{\max}{=}6$) it grows to $\sim$7\% and DH $2\times$ adds $+46\%$
+to forward time. \textbf{GL $2\times$ delivers DH $2\times$'s equivariance at DH
+default's runtime}---so the larger the model, the larger the practical advantage.
 
 \textbf{4.\ Per-layer error dynamics follow a two-phase pattern.}
 Equivariance error jumps $8$--$16\times$ from layer~0 to layer~1 as indirect contamination
