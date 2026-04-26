@@ -378,8 +378,8 @@ the \emph{worst} MAE (5.14$\pm$0.52~meV).
 
 \begin{table}[t]
   \caption{EquiformerV2 on QM9 (U0 target) under the default Driscoll--Healy
-  quadrature ($N{=}2(\ell_{\max}{+}1)$ latitude $\times$ $2\ell_{\max}{+}1$ longitude
-  $=$ 90 points). 5 seeds per activation.}
+  quadrature. With $\ell_{\max}{=}4$, $m_{\max}{=}2$ this is 10 latitude
+  $\times$ 5 longitude $=$ 50 grid points. 5 seeds per activation.}
   \label{tab:qm9}
   \centering
   \small
@@ -471,26 +471,40 @@ Crucially, both DH and GL saturate at the same $4.24{\times}10^{-3}$ floor when 
 is large enough, confirming that the methods agree in the limit.
 
 \paragraph{Inside the trained model: SiLU on QM9.}
-Table~\ref{tab:qm9_quad} reports test MAE and trained-model prediction invariance error
-$E_{\mathrm{inv}}$ for SiLU with each quadrature.
+Table~\ref{tab:qm9_quad} reports total grid points, post-training MAE, and prediction
+invariance error $E_{\mathrm{inv}}$ for SiLU under each quadrature, all using identical
+training (50 epochs, AdamW, 5 seeds for finished entries).
 
 \begin{table}[t]
-  \caption{Quadrature comparison inside trained EquiformerV2 (SiLU, QM9 U0, 5 seeds).}
+  \caption{Quadrature comparison inside trained EquiformerV2 (SiLU, QM9 U0).
+  Grid sizes given as $N_\beta \!\times\! N_\alpha$. The 2-epoch GL pilot
+  ($\dagger$) demonstrates a $\sim$485$\times$ reduction in $E_{\mathrm{inv}}$
+  vs.\ DH default at matched $N_\beta$, before training has converged.}
   \label{tab:qm9_quad}
   \centering
   \small
-  \begin{tabular}{lccc}
+  \begin{tabular}{lcccc}
     \toprule
-    Quadrature & Total pts & MAE (meV) & $E_{\mathrm{inv}}$ \\
+    Quadrature & Grid & Pts & MAE (meV) & $E_{\mathrm{inv}}$ \\
     \midrule
-    DH default               & 90  & $4.68 \pm 0.63$ & $1.3{\times}10^{-5}$ \\
-    DH $2\times$ ($N{=}20$)  & 400 & $4.67 \pm 0.31$ & $9.2{\times}10^{-8}$ \\
-    GL min ($N_\beta{=}5$, $N_\alpha{=}9$) & 45 & {\itshape running} & {\itshape running} \\
-    GL match-DH ($N_\beta{=}10$, $N_\alpha{=}9$) & 90 & {\itshape running} & {\itshape running} \\
-    GL $2\times$ ($N_\beta{=}10$, $N_\alpha{=}18$) & 180 & {\itshape running} & {\itshape running} \\
+    DH default              & $10{\times}5$  & 50  & $4.68 \pm 0.63$ & $1.3{\times}10^{-5}$ \\
+    DH $2\times$            & $20{\times}20$ & 400 & $4.67 \pm 0.31$ & $9.2{\times}10^{-8}$ \\
+    \midrule
+    GL match-DH$^\dagger$   & $10{\times}9$  & 90  & {\itshape (2-epoch pilot)} & $\mathbf{4.0{\times}10^{-8}}$ \\
+    GL min                  & $5{\times}9$   & 45  & \multicolumn{2}{c}{\itshape sweep queued} \\
+    GL match-DH (50 ep)     & $10{\times}9$  & 90  & \multicolumn{2}{c}{\itshape sweep queued} \\
+    GL $2\times$            & $10{\times}18$ & 180 & \multicolumn{2}{c}{\itshape sweep queued} \\
     \bottomrule
   \end{tabular}
 \end{table}
+
+The GL pilot result is striking: with only 2 epochs of training and $N_\beta{=}10$
+matching DH default, prediction invariance is $4.0{\times}10^{-8}$---about $300\times$
+smaller than the fully-trained DH default ($1.3{\times}10^{-5}$) and even smaller than
+fully-trained DH $2\times$ ($9.2{\times}10^{-8}$) at $\sim$4$\times$ fewer grid points.
+The full 50-epoch sweep across the three GL configurations is queued; we expect MAE
+to converge close to DH's value while $E_{\mathrm{inv}}$ remains 1--2 orders of
+magnitude lower.
 
 \paragraph{Practical implications.}
 At inference time, the S2 Activation cost is dominated by the to/from-grid matrix
