@@ -1,0 +1,90 @@
+{
+  "device": "cuda",
+  "batch_size": 64,
+  "n_iter": 30,
+  "configs": [
+    {
+      "label": "DH default",
+      "config": {
+        "method": "dh",
+        "resolution": null
+      },
+      "n_beta": 10,
+      "n_alpha": 5,
+      "n_points": 50,
+      "s2act_fwd_ms": 0.19605529184142748,
+      "s2act_fwd_bwd_ms": 0.6200278565908471,
+      "forward_ms": 64.86209095455706,
+      "forward_std": 0.9381474602326885,
+      "train_step_ms": 173.54883982334286,
+      "train_step_std": 2.7262830428259703
+    },
+    {
+      "label": "DH 2x",
+      "config": {
+        "method": "dh",
+        "resolution": 20
+      },
+      "n_beta": 20,
+      "n_alpha": 20,
+      "n_points": 400,
+      "s2act_fwd_ms": 0.6727488866696755,
+      "s2act_fwd_bwd_ms": 1.4852402731776237,
+      "forward_ms": 98.16243438981473,
+      "forward_std": 1.714411415583796,
+      "train_step_ms": 246.078379972217,
+      "train_step_std": 3.9687623691206753
+    },
+    {
+      "label": "GL min",
+      "config": {
+        "method": "gl",
+        "n_beta": 5,
+        "n_alpha": 9
+      },
+      "n_beta": 5,
+      "n_alpha": 9,
+      "n_points": 45,
+      "s2act_fwd_ms": 0.20190832825998464,
+      "s2act_fwd_bwd_ms": 0.6372361987208327,
+      "forward_ms": 64.95407215940456,
+      "forward_std": 1.052079471604261,
+      "train_step_ms": 173.46420692435154,
+      "train_step_std": 2.798131861361101
+    },
+    {
+      "label": "GL match-N_b",
+      "config": {
+        "method": "gl",
+        "n_beta": 10,
+        "n_alpha": 9
+      },
+      "n_beta": 10,
+      "n_alpha": 9,
+      "n_points": 90,
+      "s2act_fwd_ms": 0.23478626584013304,
+      "s2act_fwd_bwd_ms": 0.6547496188431978,
+      "forward_ms": 64.96091037988663,
+      "forward_std": 1.0567415303464902,
+      "train_step_ms": 173.58290426588306,
+      "train_step_std": 2.6700326807559356
+    },
+    {
+      "label": "GL 2x",
+      "config": {
+        "method": "gl",
+        "n_beta": 10,
+        "n_alpha": 20
+      },
+      "n_beta": 10,
+      "n_alpha": 20,
+      "n_points": 200,
+      "s2act_fwd_ms": 0.4098329382638137,
+      "s2act_fwd_bwd_ms": 0.8885703748092055,
+      "forward_ms": 65.20628017994265,
+      "forward_std": 1.0121286454242424,
+      "train_step_ms": 173.9507902491217,
+      "train_step_std": 2.820953404583196
+    }
+  ]
+}
