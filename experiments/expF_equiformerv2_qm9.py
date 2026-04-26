@@ -32,6 +32,11 @@ import argparse
 import logging
 from pathlib import Path
 
+# Make `src` importable regardless of CWD
+_repo_root = Path(__file__).resolve().parent.parent
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -388,6 +393,18 @@ def run_training(args):
     n_patched = patch_s2_activations(model, args.act)
     assert n_patched > 0, "No S2Activation modules found to patch"
 
+    # Optionally swap the SO3_Grid quadrature (default is e3nn DH equiangular).
+    if getattr(args, "quadrature", "dh") != "dh":
+        from src.equiformer_grid_patch import patch_so3_grid
+        n_b = getattr(args, "n_beta", None)
+        n_a = getattr(args, "n_alpha", None)
+        n_grids = patch_so3_grid(model, method=args.quadrature, n_beta=n_b, n_alpha=n_a)
+        sample_grid = model.backbone.SO3_grid[lmax][lmax]
+        log.info(
+            f"Patched {n_grids} SO3_Grids → {args.quadrature} "
+            f"(n_beta={sample_grid.n_beta}, n_alpha={sample_grid.n_alpha})"
+        )
+
     n_params = sum(p.numel() for p in model.parameters())
     log.info(f"Model params: {n_params:,}")
 
@@ -398,7 +415,13 @@ def run_training(args):
     )
 
     # ── Output directory ──
-    run_name = f"{args.act}_{args.grid}_{args.target}_seed{args.seed}"
+    quad_tag = getattr(args, "quadrature", "dh")
+    if quad_tag == "dh":
+        run_name = f"{args.act}_{args.grid}_{args.target}_seed{args.seed}"
+    else:
+        n_b = getattr(args, "n_beta", None) or "auto"
+        n_a = getattr(args, "n_alpha", None) or "auto"
+        run_name = f"{args.act}_{quad_tag}{n_b}x{n_a}_{args.target}_seed{args.seed}"
     run_dir = RESULTS_DIR / "runs" / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -633,6 +656,16 @@ def parse_args():
                     help="Number of rotations for equivariance measurement")
     tr.add_argument("--n_equiv_batches", type=int, default=20,
                     help="Number of test batches for equivariance measurement")
+    tr.add_argument("--quadrature", type=str, default="dh",
+                    choices=["dh", "gl"],
+                    help="Quadrature method for SO3_Grid. dh=Driscoll-Healy "
+                         "(EquiformerV2 default e3nn). gl=Gauss-Legendre.")
+    tr.add_argument("--n_beta", type=int, default=None,
+                    help="Latitude resolution for custom quadrature "
+                         "(default: lmax+1 for GL).")
+    tr.add_argument("--n_alpha", type=int, default=None,
+                    help="Longitude resolution for custom quadrature "
+                         "(default: 2*lmax+1).")
 
     # --- eval_equiv ---
     eq = sub.add_parser("eval_equiv", help="Evaluate equivariance on a checkpoint")

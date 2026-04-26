@@ -1,0 +1,15 @@
+--act SiLU --grid default --target U0 --seed 42 --quadrature gl --n_beta 5 --n_alpha 9
+--act SiLU --grid default --target U0 --seed 123 --quadrature gl --n_beta 5 --n_alpha 9
+--act SiLU --grid default --target U0 --seed 456 --quadrature gl --n_beta 5 --n_alpha 9
+--act SiLU --grid default --target U0 --seed 789 --quadrature gl --n_beta 5 --n_alpha 9
+--act SiLU --grid default --target U0 --seed 1024 --quadrature gl --n_beta 5 --n_alpha 9
+--act SiLU --grid default --target U0 --seed 42 --quadrature gl --n_beta 10 --n_alpha 9
+--act SiLU --grid default --target U0 --seed 123 --quadrature gl --n_beta 10 --n_alpha 9
+--act SiLU --grid default --target U0 --seed 456 --quadrature gl --n_beta 10 --n_alpha 9
+--act SiLU --grid default --target U0 --seed 789 --quadrature gl --n_beta 10 --n_alpha 9
+--act SiLU --grid default --target U0 --seed 1024 --quadrature gl --n_beta 10 --n_alpha 9
+--act SiLU --grid default --target U0 --seed 42 --quadrature gl --n_beta 10 --n_alpha 18
+--act SiLU --grid default --target U0 --seed 123 --quadrature gl --n_beta 10 --n_alpha 18
+--act SiLU --grid default --target U0 --seed 456 --quadrature gl --n_beta 10 --n_alpha 18
+--act SiLU --grid default --target U0 --seed 789 --quadrature gl --n_beta 10 --n_alpha 18
+--act SiLU --grid default --target U0 --seed 1024 --quadrature gl --n_beta 10 --n_alpha 18
