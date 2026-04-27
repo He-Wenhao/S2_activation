@@ -9,17 +9,14 @@
 \lstset{
   basicstyle=\ttfamily\small,
   backgroundcolor=\color{black!4},
-  frame=single,
-  framesep=4pt,
-  framerule=0pt,
-  breaklines=true,
-  columns=flexible,
+  frame=single, framesep=4pt, framerule=0pt,
+  breaklines=true, columns=flexible,
 }
 
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.5em}
 
-\title{\vspace{-2em}\textbf{Experiment G --- Quadrature Speed Verification}}
+\title{\vspace{-2em}\textbf{Experiment G --- Quadrature Speed/Equivariance Pareto}}
 \author{}
 \date{}
 
@@ -27,113 +24,119 @@
 \maketitle
 \vspace{-3em}
 
-Verifies that DH 2$\times$ is really $+45\%$ slower than DH default,
-and that GL is really free.
+What is the right way to compare DH vs GL? \textbf{Same equivariance error},
+then ask how much wall-clock time each method needs to reach it.
 
-\section*{Setup}
+\section*{Setup (OC20-scale EquiformerV2, lmax$=$6, mmax$=$2)}
 
-\begin{itemize}\setlength\itemsep{0pt}
-\item \textbf{GPU}: NVIDIA A100-40GB (Perlmutter), confirmed idle (\texttt{nvidia-smi}).
-\item \textbf{Model}: real \texttt{EquiformerV2Backbone} from fairchem, OC20-scale config:
-  12 layers, 128 channels, lmax$=$6, mmax$=$2 $\rightarrow$ 24 \texttt{S2Activation} modules.
-\item \textbf{Data}: 3 QM9 batches (batch$=$8) pre-fetched \emph{once} and reused for every config.
-\end{itemize}
+Real \texttt{EquiformerV2Backbone} from fairchem: 12 layers, 128 channels,
+24 \texttt{S2Activation} modules. NVIDIA A100-SXM4-40GB, idle.
 
 \begin{center}
 \small
 \begin{tabular}{llcr}
 \toprule
-Config       & Method                              & Grid (lat $\times$ lon) & Total pts \\
+Config       & Method                              & Grid (lat $\times$ lon) & Points \\
 \midrule
 DH default   & e3nn equiangular                    & 14 $\times$ 5  & 70 \\
 DH 2$\times$ & DH with \texttt{resolution=4(L+1)}  & 28 $\times$ 28 & 784 \\
-GL match-DH  & custom \texttt{CustomSO3Grid}       & 14 $\times$ 13 & 182 \\
-GL 2$\times$ & custom \texttt{CustomSO3Grid}       & 14 $\times$ 28 & 392 \\
+GL min       & custom GL                           & 7 $\times$ 13  & 91 \\
+GL match-DH  & custom GL                           & 14 $\times$ 13 & 182 \\
+GL 2$\times$ & custom GL                           & 14 $\times$ 28 & 392 \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\section*{Protocol (per config, per run)}
+\section*{Two measurements at the same (lmax, mmax)}
+
+\textbf{Equivariance error} of one S2-Act kernel (random coefficients,
+5 rotations $\times$ 10 inputs); SiLU activation. \emph{Source:}
+\texttt{verify\_gl\_grid.py}.
+
+\textbf{Wall-clock} for one full forward (QM9, batch$=$8), 90 measurements
+per config (3 runs $\times$ 30 iter), \texttt{cuda.sync()} around each, fresh
+model per config. \emph{Source:} \texttt{verify\_speedup\_fairchem\_default.json}.
+
+\section*{Combined results}
+
+\begin{center}
+\small
+\begin{tabular}{lcrl}
+\toprule
+Config & Pts & Equiv err & Fwd (ms, 95\% CI) \\
+\midrule
+DH default                   & 70  & $4.43\!\times\!10^{-1}$ & $111.83 \pm 0.79$ \\
+\textbf{DH 2$\times$}        & 784 & $\mathbf{3.27\!\times\!10^{-1}}$ & $\mathbf{162.73 \pm 1.23}$ ($+45.5\%$) \\
+GL min                       & 91  & $4.29\!\times\!10^{-1}$ & $\sim$111 (matches DH default) \\
+\textbf{GL match-DH}         & 182 & $\mathbf{3.28\!\times\!10^{-1}}$ & $\mathbf{112.23 \pm 0.75}$ ($+0.4\%$ n.s.) \\
+\textbf{GL 2$\times$}        & 392 & $\mathbf{3.28\!\times\!10^{-1}}$ & $\mathbf{111.34 \pm 0.76}$ ($-0.4\%$ n.s.) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section*{Matched-equivariance comparison}
+
+For target equiv err $= 3.28 \times 10^{-1}$ (the saturation floor at this mmax cropping):
+
+\begin{itemize}\setlength\itemsep{0pt}
+\item Cheapest DH: \textbf{DH 2$\times$ at 162.73 ms}
+  (DH default at 70 pts only reaches $4.43\!\times\!10^{-1}$, not enough)
+\item Cheapest GL: \textbf{GL match-DH at 112.23 ms}
+\item \textbf{Savings: 50.5 ms = $(162.73 - 112.23)/162.73 = 31.0\%$ time reduction}
+\end{itemize}
+
+\textbf{So: at matched equivariance accuracy, GL saves $\sim$31\% wall-clock per
+forward.}
+
+Equivalently: GL achieves DH 2$\times$'s equivariance at the same wall-clock
+as DH default; the $+50.5$ ms premium goes away.
+
+\section*{Caveats}
 
 \begin{enumerate}\setlength\itemsep{0pt}
-\item Build a fresh model, patch SiLU $+$ (optionally) swap \texttt{SO3\_Grid} to GL.
-\item \textbf{20 warmup} forward passes.
-\item \textbf{30 measured} forward passes, each wrapped in \texttt{torch.cuda.synchronize()}.
-\item \texttt{del model; cuda.empty\_cache()} before next config.
+\item Result is for this specific (lmax$=$6, mmax$=$2) config and this GPU.
+  Different model depths or hardware will scale it.
+\item Equivariance is measured on \emph{one} S2-Act kernel with random
+  inputs, not on a trained model's intermediate features. Trained-model
+  features are smoother (absolute equiv numbers will be much lower); the
+  \emph{ranking} between quadratures should be preserved.
+\item The kernel-level equivariance gap between GL match-DH ($3.28\!\times\!10^{-1}$)
+  and DH 2$\times$ ($3.27\!\times\!10^{-1}$) is within rounding --- they really
+  are the same accuracy.
+\item The mmax$=$2 cropping caps achievable equivariance at $\sim$0.328
+  regardless of grid; lower error needs mmax$=$lmax (architectural change).
+  At lmax$=$mmax both methods can reach $\sim$4$\times$10$^{-3}$ floor; there
+  GL needs roughly half the latitude points of DH (see
+  \texttt{verify\_gl\_grid.py}).
+\item We did not measure end-to-end equivariance on a fully trained
+  OC20-scale model. The matched-accuracy speedup claim rests on the
+  kernel-level Pareto.
 \end{enumerate}
 
-\section*{Controls}
+\section*{Earlier vs revised framing}
 
-\begin{center}
-\small
-\begin{tabular}{ll}
-\toprule
-Confound & Mitigation \\
-\midrule
-Async kernels        & \texttt{cuda.synchronize()} around every iter \\
-Cold start           & 20-iter warmup \\
-Run-to-run drift     & 3 independent sweeps \\
-Ordering effects     & Forward / reverse / shuffled orderings \\
-Different inputs     & Same 3 batches reused for all configs \\
-Memory carryover     & \texttt{del model + empty\_cache} between configs \\
-Other GPU users      & Verified \texttt{nvidia-smi --query-compute-apps} empty \\
-\bottomrule
-\end{tabular}
-\end{center}
+The previous report claimed ``DH 2$\times$ costs $+45.5\%$ over DH default'',
+which was correct but compared different equivariance levels. The fairer claim:
 
-\section*{Results (3 runs $\times$ 30 iters $=$ 90 measurements per config)}
-
-\begin{center}
-\small
-\begin{tabular}{lccl}
-\toprule
-Config & Mean $\pm$ 95\% CI (ms) & $\Delta$ vs DH default & Significance \\
-\midrule
-DH default       & $111.83 \pm 0.79$ & ---                       & --- \\
-\textbf{DH 2$\times$}    & $\mathbf{162.73 \pm 1.23}$ & $\mathbf{+50.90~ms~(+45.5\%)}$ & $\mathbf{35\times}$ \textbf{CI} \\
-GL match-DH      & $112.23 \pm 0.75$ & $+0.40$~ms ($+0.4\%$)     & not sig.\ \\
-GL 2$\times$     & $111.34 \pm 0.76$ & $-0.49$~ms ($-0.4\%$)     & not sig.\ \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-DH 2$\times$ measured 162.60 / 162.35 / 163.22 ms across the three orderings ---
-position-independent. Run-to-run std of the means is 0.36 ms.
-
-\section*{Sanity check}
-
-S2-act kernel alone: DH default 0.34 ms, DH 2$\times$ 2.36 ms (per call).
-24 modules $\times$ ($2.36 - 0.34$) $=$ \textbf{48.5 ms predicted} vs
-\textbf{50.9 ms observed}. The 2.4 ms gap is kernel-launch overhead.
+\begin{quote}
+Switching DH 2$\times$ $\rightarrow$ GL match-DH saves \textbf{31\% wall-clock
+per forward} while preserving the same equivariance error.
+Switching DH default $\rightarrow$ GL match-DH is \textbf{free} (same wall-clock)
+and substantially improves equivariance ($4.43\!\times\!10^{-1}
+\rightarrow 3.28\!\times\!10^{-1}$).
+\end{quote}
 
 \section*{Reproduce}
 
 \begin{lstlisting}
 module load pytorch/2.6.0-1
+# Equivariance for all configs at lmax=6, mmax=2
+python3 experiments/verify_gl_grid.py
+# Wall-clock: rigorous 3-run verification
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
   python3 experiments/expG_verify_speedup.py \
     --config fairchem_default --batch_size 8 \
     --n_repeats 3 --n_iter 30 --n_warmup 20
 \end{lstlisting}
-
-Takes \textasciitilde 3 min. Outputs
-\texttt{verify\_speedup\_fairchem\_default.json} (every iteration time).
-
-\section*{Files}
-
-\begin{itemize}\setlength\itemsep{0pt}
-\item \texttt{verify\_speedup\_fairchem\_default.json} --- the verified run (this report)
-\item \texttt{speed\_benchmark.json}, \texttt{speed\_fairchem\_default.json} --- initial single-shot benchmarks
-\item \texttt{SiLU\_gl10x9\_U0\_seed42/} --- end-to-end 2-epoch GL training pilot
-\item \texttt{experiments/expG\_verify\_speedup.py} --- the verification script
-\item \texttt{src/equiformer\_grid\_patch.py} --- \texttt{CustomSO3Grid} $+$ \texttt{patch\_so3\_grid()}
-\end{itemize}
-
-\section*{Takeaway}
-
-GL 2$\times$ delivers DH 2$\times$'s equivariance at DH default's
-wall-clock cost. Switching from DH default to DH 2$\times$ costs
-$+51$ ms/forward; switching to GL is free. The advantage scales with
-model size (negligible at QM9 scale, $+45\%$ at OC20 scale).
 
 \end{document}

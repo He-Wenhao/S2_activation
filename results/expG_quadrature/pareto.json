@@ -1,0 +1,41 @@
+{
+  "config": "OC20-scale: 12 layers, 128 channels, lmax=6, mmax=2",
+  "note": "Equivariance from experiments/verify_gl_grid.py (single S2-act kernel, 5 rotations x 10 random inputs). Wall-clock from experiments/expG_verify_speedup.py (3 runs x 30 iter = 90 measurements per config, A100-SXM4-40GB). Both at lmax=6, mmax=2.",
+  "results": [
+    {
+      "label": "DH default", "method": "dh", "n_beta": 14, "n_alpha": 5, "n_points": 70,
+      "equiv_err": 0.443,
+      "fwd_ms_mean": 111.83, "fwd_ms_ci95": 0.79
+    },
+    {
+      "label": "DH 2x", "method": "dh", "n_beta": 28, "n_alpha": 28, "n_points": 784,
+      "equiv_err": 0.327,
+      "fwd_ms_mean": 162.73, "fwd_ms_ci95": 1.23
+    },
+    {
+      "label": "GL min", "method": "gl", "n_beta": 7, "n_alpha": 13, "n_points": 91,
+      "equiv_err": 0.429,
+      "fwd_ms_mean": null, "fwd_ms_ci95": null,
+      "fwd_note": "not separately measured; comparable to DH default (~111 ms) given similar point count"
+    },
+    {
+      "label": "GL match-DH", "method": "gl", "n_beta": 14, "n_alpha": 13, "n_points": 182,
+      "equiv_err": 0.328,
+      "fwd_ms_mean": 112.23, "fwd_ms_ci95": 0.75
+    },
+    {
+      "label": "GL 2x", "method": "gl", "n_beta": 14, "n_alpha": 28, "n_points": 392,
+      "equiv_err": 0.328,
+      "fwd_ms_mean": 111.34, "fwd_ms_ci95": 0.76
+    }
+  ],
+  "pareto": [
+    {
+      "equiv_target": 0.328,
+      "cheapest_dh": {"label": "DH 2x", "fwd_ms": 162.73},
+      "cheapest_gl": {"label": "GL match-DH", "fwd_ms": 112.23},
+      "savings_ms": 50.50,
+      "savings_pct": 31.0
+    }
+  ]
+}

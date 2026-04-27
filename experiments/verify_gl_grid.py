@@ -149,6 +149,8 @@ def main():
     # Pure quadrature comparison: no mmax cropping
     run_table(4, 4)
     run_table(6, 6)
+    # OC20-scale config: lmax=6, mmax=2 (matches expG speed benchmark)
+    run_table(6, 2)
 
 
 if __name__ == "__main__":
