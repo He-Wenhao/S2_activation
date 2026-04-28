@@ -13,3 +13,6 @@ __pycache__/
 data/
 *.pt
 logs/
+
+# Claude Code runtime state
+.claude/scheduled_tasks.lock
