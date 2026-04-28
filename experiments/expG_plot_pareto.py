@@ -138,7 +138,7 @@ def main():
     ax.set_yscale("log")
     ax.set_title(
         "Pareto frontier: equivariance vs wall-clock\n"
-        "EquiformerV2 OC20-scale (12 layers, lmax=6, mmax=2), batch=8",
+        "EquiformerV2 fairchem default (12 layers, lmax=6, mmax=2), batch=8",
         fontsize=11,
     )
     ax.grid(True, which="both", alpha=0.3)

@@ -27,10 +27,18 @@
 What is the right way to compare DH vs GL? \textbf{Same equivariance error},
 then ask how much wall-clock time each method needs to reach it.
 
-\section*{Setup (OC20-scale EquiformerV2, lmax$=$6, mmax$=$2)}
+\section*{Setup (fairchem default EquiformerV2, lmax$=$6, mmax$=$2)}
 
 Real \texttt{EquiformerV2Backbone} from fairchem: 12 layers, 128 channels,
 24 \texttt{S2Activation} modules. NVIDIA A100-SXM4-40GB, idle.
+
+These are the function-signature defaults of \texttt{EquiformerV2}
+in fairchem (\texttt{num\_layers=12}, \texttt{sphere\_channels=128},
+\texttt{lmax\_list=[6]}, \texttt{mmax\_list=[2]}); the published OC20
+SOTA model is larger (20 layers, lmax=8, mmax=8, $\sim$150M params),
+so the $+31\%$ savings here is a lower bound for the production model.
+The 24 modules $=$ $2 \times$ num\_layers (one S2 act in graph attention
+$+$ one in FFN per \texttt{TransBlockV2}).
 
 \begin{center}
 \small
@@ -109,7 +117,7 @@ as DH default; the $+50.5$ ms premium goes away.
   GL needs roughly half the latitude points of DH (see
   \texttt{verify\_gl\_grid.py}).
 \item We did not measure end-to-end equivariance on a fully trained
-  OC20-scale model. The matched-accuracy speedup claim rests on the
+  fairchem default model. The matched-accuracy speedup claim rests on the
   kernel-level Pareto.
 \end{enumerate}
 

@@ -3,10 +3,23 @@
 What is the right way to compare DH vs GL? **Same equivariance error**, then ask
 how much wall-clock time each method needs to reach it.
 
-## Setup (OC20-scale EquiformerV2, lmax=6, mmax=2)
+## Setup (fairchem default EquiformerV2, lmax=6, mmax=2)
 
 Real `EquiformerV2Backbone` from fairchem: 12 layers, 128 channels, 24
 `S2Activation` modules. NVIDIA A100-SXM4-40GB, idle.
+
+These hyperparameters are the **function-signature defaults** of
+`EquiformerV2` in `fairchem.core.models.equiformer_v2.equiformer_v2.py`
+(`num_layers=12`, `sphere_channels=128`, `lmax_list=[6]`, `mmax_list=[2]`).
+That makes them a reasonable mid-size config, but **not the published OC20
+SOTA**: the EquiformerV2 paper (Liao et al., ICLR 2024) reports its best
+OC20 S2EF model with 20 layers, lmax=8, mmax=8 (~150M params). The setting
+here is smaller. The `+31%` savings reported below is therefore a
+\emph{lower bound} for the production OC20 model — at larger lmax and
+more layers, the S2 activation is an even larger fraction of forward time.
+The "24" S2 activation modules count is `2 × num_layers = 24` (each
+`TransBlockV2` has one S2 activation in the graph-attention block and one
+in the FFN, verified by the `Patched 24 S2Activation modules` log line).
 
 | Config | Method | Grid (lat × lon) | Points |
 |---|---|---|---|
@@ -71,7 +84,7 @@ needs roughly half the latitude points of DH for matched accuracy**
 3. The kernel-level equivariance gap between GL match-DH (3.28e-1) and DH 2×
    (3.27e-1) is small (within rounding) — they really are the same accuracy.
    Compare GL min (4.29e-1) vs DH default (4.43e-1) — also near-tied.
-4. We did not measure equivariance at the OC20-scale fully trained model. To
+4. We did not measure equivariance at the fairchem default fully trained model. To
    prove the +31% savings holds end-to-end, one would need to train a model
    with each grid for 50 epochs and measure prediction invariance error.
 
