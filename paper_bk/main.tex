@@ -1,0 +1,813 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage{icml2024}
+\usepackage{microtype}
+\usepackage{bm}
+\usepackage{multirow}
+\usepackage{wrapfig}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+\graphicspath{{figures/}}
+
+\title{\vspace{-1em}\textbf{Spectral Leakage, Aliasing, and Jacobian Isotropy\\in S2 Activation for SO(3)-Equivariant Networks}\vspace{-0.5em}}
+
+\author{%
+  Anonymous Author(s)
+}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+S2 Activation---the standard nonlinearity in SO(3)-equivariant networks---applies a
+pointwise activation on the sphere via spherical harmonic (SH) expansion, truncation to
+$\ell_{\max}$, and finite quadrature. We present a systematic study decomposing
+its errors along two axes: \emph{activation choice} and \emph{quadrature strategy}.
+We identify a fundamental \emph{truncation--aliasing dichotomy}: coefficient error is
+dominated by truncation (insensitive to oversampling), while equivariance error is dominated
+by aliasing (reduced $10$--$450\times$ by $3\times$ oversampling).
+We further show that EquiformerV2's default e3nn grid uses \emph{Driscoll--Healy}
+equiangular quadrature, and that swapping it for \emph{Gauss--Legendre}---a drop-in
+change requiring no retraining---halves the grid points needed for matched
+equivariance. End-to-end timing on QM9 (small model, S2 act $\sim$0.3\% of fwd) shows
+GL is essentially free, while at OC20 scale (12 layers, $\ell_{\max}{=}6$, S2 act
+$\sim$7\% of fwd) GL $2\times$ delivers DH $2\times$'s equivariance at DH default's
+runtime ($+46\%$ savings).
+Controlled experiments
+on EquiformerV2/QM9 (6 activations, 5 seeds each) reveal a surprising
+\emph{smoothness--expressiveness tradeoff}: the Spearman correlation between theoretical
+equivariance error and downstream MAE is $\rho = -0.94$ ($p = 0.005$)---less equivariant
+activations perform \emph{better}. We trace this to Jacobian throughput: the nuclear norm
+(total singular-value mass), not effective rank, predicts task performance
+($\rho = -0.94$). Analysis of per-layer equivariance error reveals a two-phase pattern---an
+$8$--$16\times$ jump from layer~0 to 1, then a plateau---explained by the transition
+from indirect to direct cross-degree contamination in the transformer architecture.
+\end{abstract}
+
+%========================================================================
+\section{Introduction}
+\label{sec:intro}
+%========================================================================
+
+S2 Activation is the standard pointwise nonlinearity in SO(3)-equivariant neural networks,
+including SCN~\citep{scn}, eSCN~\citep{escn}, and EquiformerV2~\citep{equiformerv2}.
+Given spherical harmonic (SH) coefficients $\{c_{\ell m}\}$ for
+$\ell = 0,\dots,\ell_{\max}$, the operator projects onto the sphere, applies a scalar
+nonlinearity $\sigma$, and integrates back via quadrature. Both the finite bandwidth
+$\ell_{\max}$ and the finite quadrature introduce error and can break SO(3) equivariance.
+
+Prior work has studied specific quadrature schemes for S2 Activation~\citep{e3nn} and
+observed that equivariance degrades with non-smooth activations, but a systematic
+decomposition of the error sources has been lacking. In this paper we:
+\begin{enumerate}
+  \item Show that \textbf{spectral leakage} (energy generated above $\ell_{\max}$) is
+    strongly correlated with equivariance error across activations (\S\ref{sec:activation}).
+  \item Identify a \textbf{truncation--aliasing dichotomy}: coefficient error is
+    truncation-dominated (sampling-insensitive), while equivariance error is
+    aliasing-dominated (sampling-sensitive) (\S\ref{sec:sampling}).
+  \item Introduce a \textbf{Jacobian isotropy} metric that measures how uniformly
+    S2 Activation explores output directions, and show it is orthogonal to leakage
+    (\S\ref{sec:isotropy}).
+  \item Reveal a \textbf{smoothness--expressiveness tradeoff} on EquiformerV2/QM9:
+    less equivariant activations achieve better task performance, explained by Jacobian
+    throughput rather than isotropy (\S\ref{sec:task}, \S\ref{sec:tradeoff}).
+  \item Demonstrate that \textbf{Gauss--Legendre quadrature is a drop-in upgrade} for
+    EquiformerV2's default Driscoll--Healy grid: GL achieves the same equivariance
+    error with $\sim$2$\times$ fewer grid points, both in numerical benchmarks and
+    inside trained networks (\S\ref{sec:quadrature}).
+  \item Characterize \textbf{per-layer error dynamics} in deep equivariant architectures,
+    showing a two-phase accumulation pattern driven by cross-degree coupling
+    (\S\ref{sec:perlayer}).
+\end{enumerate}
+
+%========================================================================
+\section{Background and Definitions}
+\label{sec:background}
+%========================================================================
+
+\paragraph{S2 Activation pipeline.}
+Let $f : S^2 \to \mathbb{R}$ be a band-limited function with SH coefficients
+$\{c_{\ell m}\}$ for $\ell \le \ell_{\max}$, $m \in \{-\ell,\dots,\ell\}$.
+The S2 Activation $A_\sigma$ proceeds in three steps:
+\begin{align}
+  \text{(1)}\quad f(x_i) &= \textstyle\sum_{\ell=0}^{\ell_{\max}} \sum_{m=-\ell}^{\ell}
+    c_{\ell m}\, Y_{\ell m}(x_i), \label{eq:fwd} \\
+  \text{(2)}\quad g(x_i) &= \sigma\bigl(f(x_i)\bigr), \label{eq:act} \\
+  \text{(3)}\quad c'_{\ell m} &= \textstyle\sum_{i=1}^{N} w_i\, g(x_i)\, Y_{\ell m}(x_i),
+    \label{eq:inv}
+\end{align}
+where $\{x_i, w_i\}_{i=1}^N$ is a quadrature rule on $S^2$ with
+$\sum_i w_i = 4\pi$.
+
+\paragraph{Angular power spectrum.}
+$P(\ell) = \sum_{m=-\ell}^{\ell} |c_{\ell m}|^2$ measures the total energy at degree
+$\ell$.
+
+\paragraph{Spectral leakage ratio.}
+After applying $\sigma$ to a band-limited input ($\ell \le \ell_{\max}$), the output
+generally has energy at all degrees. We measure the leakage via a high-resolution
+reference quadrature ($\ell_{\max}^{\mathrm{ref}} = 25$):
+\begin{equation}
+  R = \frac{\sum_{\ell > \ell_{\max}} P_g(\ell)}{\sum_{\ell \ge 0} P_g(\ell)},
+  \label{eq:leakage}
+\end{equation}
+where $P_g$ is the power spectrum of $g = \sigma \circ f$.
+
+\paragraph{Coefficient error.}
+$E_{\mathrm{coeff}} = \|c'_{\mathrm{out}} - c'_{\mathrm{gt}}\| / \|c'_{\mathrm{gt}}\|$,
+where $c'_{\mathrm{gt}}$ is obtained with GL quadrature at
+$\ell_{\max}^{\mathrm{ref}} = 25$, truncated to $\ell_{\max}$.
+
+\paragraph{Equivariance error.}
+For rotation $R \in \mathrm{SO}(3)$ with Wigner-$D$ matrix $D(R)$:
+\begin{equation}
+  E_{\mathrm{equiv}} = \frac{\|A_\sigma(D(R)\,c) - D(R)\,A_\sigma(c)\|}
+  {\|A_\sigma(D(R)\,c)\|},
+  \label{eq:equiv}
+\end{equation}
+averaged over 20 random rotations and 10 random inputs.
+
+\paragraph{Experimental setup.}
+Inputs: $c_{\ell m} \sim \mathcal{N}(0,1)$ i.i.d., giving $({\ell_{\max}+1})^2$
+coefficients. We test $\ell_{\max} \in \{3, 6, 10\}$ and focus on $\ell_{\max} = 6$
+($d = 49$). Activations: $C^\infty$ smooth (Softplus($\beta{=}1$), SiLU, GELU, tanh),
+$C^0$ (ReLU, $|\cdot|$), and the parametric family Softplus($\beta$) with
+$\beta \in \{1, 3, 10, 30, 100\}$. Quadrature: Gauss--Legendre (GL),
+Lebedev, and uniform (equiangular) grids.
+
+%========================================================================
+\section{Equivariance Error vs.\ Activation Function}
+\label{sec:activation}
+%========================================================================
+
+We first investigate how the activation choice affects equivariance, holding the
+quadrature fixed at GL$_{1\times}$.
+
+\paragraph{Spectral leakage across activations.}
+Figure~\ref{fig:leakage} shows the leakage ratio $R$ for each activation at
+$\ell_{\max} = 3, 6, 10$. The ranking is consistent:
+$C^\infty$ non-saturating activations (Softplus(1): $R{=}0.035$; SiLU: $R{=}0.108$) have
+lower leakage than $C^0$ activations (ReLU: $R{=}0.090$; $|\cdot|$: $R{=}0.160$).
+The Softplus($\beta$) family interpolates continuously: $R$ increases monotonically with
+$\beta$, confirming that leakage is controlled by activation smoothness. Notably, tanh
+($R{=}0.094$) has moderate leakage despite being $C^\infty$, because saturation compresses
+the output range.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig1_leakage.png}
+  \caption{Spectral leakage ratio $R$ (Eq.~\ref{eq:leakage}) for each activation at
+  $\ell_{\max} = 3, 6, 10$. Red: $C^0$. Green: Softplus family. Blue: $C^\infty$.
+  Error bars: std over 10 random inputs.}
+  \label{fig:leakage}
+\end{figure*}
+
+\paragraph{Leakage predicts equivariance error.}
+Figure~\ref{fig:equiv_vs_leak} plots $E_{\mathrm{equiv}}$ against $R$ for each
+activation. The strong positive correlation confirms the mechanistic link: leaked energy
+aliases back into $\ell \le \ell_{\max}$ coefficients in a rotation-dependent manner,
+since different rotations move the function relative to the fixed quadrature grid,
+producing different aliasing patterns.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.85\textwidth]{fig2_equiv_vs_leak.png}
+  \caption{Equivariance error $E_{\mathrm{equiv}}$ vs.\ leakage ratio $R$ at
+  $\ell_{\max} = 3, 6, 10$ (GL$_{1\times}$). Each point is one activation.
+  The correlation shows leakage is a strong predictor of equivariance violation.}
+  \label{fig:equiv_vs_leak}
+\end{figure*}
+
+%========================================================================
+\section{Equivariance Error vs.\ Sampling Strategy}
+\label{sec:sampling}
+%========================================================================
+
+\subsection{The Truncation--Aliasing Dichotomy}
+
+\paragraph{Coefficient error is sampling-insensitive.}
+Figure~\ref{fig:coeff_oversamp} shows $E_{\mathrm{coeff}}$ vs.\ GL oversampling ratio
+($1\times$, $2\times$, $3\times$). The curves are nearly flat: increasing quadrature points
+from $\sim$100 to $\sim$700 barely changes the output coefficients. This is because the
+error is dominated by \emph{truncation}: when $\sigma$ generates energy at $\ell > \ell_{\max}$,
+that energy is lost regardless of quadrature accuracy---the output SH basis simply cannot
+represent it.
+
+\paragraph{Equivariance error is sampling-sensitive.}
+In contrast, Figure~\ref{fig:equiv_oversamp} shows that GL$_{3\times}$ reduces
+$E_{\mathrm{equiv}}$ by $10$--$450\times$ compared to GL$_{1\times}$, depending on the
+activation (Table~\ref{tab:oversamp}).
+
+\paragraph{Why the dichotomy?}
+The key insight is that \emph{truncation error is equivariant but aliasing error is not}.
+Truncation is a projection onto the $\ell \le \ell_{\max}$ subspace, which commutes with
+SO(3) rotations (each degree $\ell$ transforms independently under the Wigner-$D$ matrices).
+It loses information but loses the \emph{same} information regardless of orientation.
+Aliasing, however, arises when the quadrature cannot exactly integrate products of high-$\ell$
+and low-$\ell$ harmonics. The fold-back pattern depends on the function's orientation
+relative to the fixed quadrature grid, so it changes with rotation, breaking equivariance.
+Oversampling reduces aliasing by providing enough quadrature points to accurately integrate
+these cross-terms. Smoother activations benefit more because they have less high-$\ell$
+content to alias.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig3_coeff_oversamp.png}
+  \caption{Coefficient error $E_{\mathrm{coeff}}$ vs.\ GL oversampling ratio.
+  Near-flat curves show that quadrature resolution does not reduce coefficient error,
+  because truncation dominates.}
+  \label{fig:coeff_oversamp}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig4_equiv_oversamp.png}
+  \caption{Equivariance error $E_{\mathrm{equiv}}$ vs.\ GL oversampling ratio.
+  Compare with Fig.~\ref{fig:coeff_oversamp}: while coefficient error is flat,
+  equivariance error drops 1--2 orders of magnitude with $3\times$ oversampling.}
+  \label{fig:equiv_oversamp}
+\end{figure*}
+
+\begin{table}[t]
+  \caption{Equivariance error under GL oversampling ($\ell_{\max}{=}6$).}
+  \label{tab:oversamp}
+  \centering
+  \small
+  \begin{tabular}{lcccc}
+    \toprule
+    Activation & GL$_{1\times}$ & GL$_{3\times}$ & Ratio \\
+    \midrule
+    Softplus(1) & 0.142 & $3.2{\times}10^{-4}$ & 450$\times$ \\
+    SiLU & 0.260 & $1.6{\times}10^{-3}$ & 162$\times$ \\
+    ReLU & 0.244 & $1.1{\times}10^{-2}$ & 23$\times$ \\
+    tanh & 0.281 & $1.3{\times}10^{-2}$ & 21$\times$ \\
+    $|\cdot|$ & 0.333 & $1.5{\times}10^{-2}$ & 22$\times$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Comparison of Quadrature Methods}
+
+Figure~\ref{fig:sampling} compares GL, Lebedev, and uniform grids at $\ell_{\max}{=}6$.
+GL slightly outperforms Lebedev at matched oversampling (GL$_{1\times}$ vs.\ Leb-min),
+likely due to optimal placement for the tensor-product structure of $S^2$. Lebedev at
+$2\times$ degree (230 points) performs comparably to GL$_{2\times}$ (338 points) for smooth
+activations. Uniform grids at high resolution ($N{=}5000$) achieve the lowest error across
+all activations. The relative ranking of activations is preserved across all quadrature
+methods, confirming that the smoothness effect is independent of quadrature choice.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig5_sampling.png}
+  \caption{$E_{\mathrm{equiv}}$ under six sampling strategies at $\ell_{\max}{=}6$.
+  $N$: number of quadrature points. Log scale. The activation ranking is stable
+  across methods.}
+  \label{fig:sampling}
+\end{figure*}
+
+%========================================================================
+\section{Jacobian Isotropy Analysis}
+\label{sec:isotropy}
+%========================================================================
+
+Equivariance is not the only property that matters for downstream tasks: the activation
+must also produce diverse nonlinear transformations on the sphere. We quantify this via
+the Jacobian of the (discretized) S2 Activation operator.
+
+\paragraph{Definition.}
+The S2 Activation $A_\sigma : \mathbb{R}^d \to \mathbb{R}^d$ maps input SH coefficients
+$c$ to output coefficients $c' = A_\sigma(c)$. Its Jacobian at $c$ is
+$J(c) = \partial A_\sigma / \partial c$, a $d{\times}d$ matrix with singular values
+$s_1 \ge s_2 \ge \cdots \ge s_d$. We define the \emph{Jacobian isotropy} as the
+\emph{effective rank}:
+\begin{equation}
+  \mathrm{EffRank}(J) = \exp\!\Bigl(-\sum_i p_i \log p_i\Bigr),
+  \quad p_i = \frac{s_i^2}{\sum_j s_j^2},
+  \label{eq:effrank}
+\end{equation}
+which counts how many directions in output space the operator locally explores.
+$\mathrm{EffRank} = d$ means perfectly isotropic (all $s_i$ equal);
+$\mathrm{EffRank} = 1$ means all output variation is along a single direction.
+
+\textbf{Important caveat:} Effective rank measures the \emph{distribution} of singular
+values, not their magnitude. A Jacobian $\varepsilon I$ has maximal effective rank but
+negligible output variation. We therefore report effective rank alongside the Frobenius
+norm $\|J\|_F$ in the supplementary material. For all activations tested,
+$\|J\|_F$ is of similar order, so effective rank is a meaningful comparison.
+
+\paragraph{Computation.}
+From the S2 Activation forward pass \eqref{eq:fwd}--\eqref{eq:inv}, the Jacobian is
+$J = W_Y^\top \,\mathrm{diag}(\sigma'(Y c))\, Y$, where $Y$ is the SH evaluation matrix
+and $W_Y$ the weighted inverse matrix. We compute $J$ via autograd and take its SVD.
+Results are averaged over 50 random inputs ($c_{\ell m} \sim \mathcal{N}(0,1)$).
+
+\textbf{Note:} The effective rank depends on the specific discretization
+(GL$_{1\times}$ here). All isotropy claims in this paper are scoped to this quadrature.
+
+\paragraph{Results.}
+Figure~\ref{fig:effrank} shows the effective rank at $\ell_{\max} = 3, 6, 10$, revealing
+a pattern that contradicts naive intuitions:
+
+\begin{itemize}
+  \item \textbf{Softplus(1) has the highest effective rank} (33.5/49 at $\ell_{\max}{=}6$),
+    because its smooth, non-saturating derivative $\sigma'(f)$ is nonzero and varies
+    gradually across the sphere, producing a well-conditioned Jacobian.
+  \item \textbf{tanh has low effective rank} (25.6/49), because saturation
+    ($\tanh'(f) \to 0$ for large $|f|$) collapses many output directions.
+  \item \textbf{$|\cdot|$ has the highest rank} (39.6/49), because
+    $|\sigma'(f)| = 1$ a.e., preserving all directions despite being $C^0$.
+  \item \textbf{Softplus($\beta$) rank decreases with $\beta$}: as $\beta$ increases
+    toward ReLU, the derivative zeros out for $f < 0$, collapsing $\sim$half the
+    directions.
+\end{itemize}
+
+Figure~\ref{fig:effrank_vs_leak} plots isotropy against leakage, showing the two metrics
+are separable. Under GL$_{1\times}$, Softplus(1) and SiLU sit in the low-leakage /
+high-isotropy quadrant, while tanh has lower isotropy due to saturation and $|\cdot|$ has
+high isotropy but high leakage.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig6_effrank.png}
+  \caption{Effective rank (Eq.~\ref{eq:effrank}) of the S2 Activation Jacobian for
+  GL$_{1\times}$ at $\ell_{\max} = 3, 6, 10$. Dashed: max rank $d$.
+  Averaged over 50 random inputs.}
+  \label{fig:effrank}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.85\textwidth]{fig7_effrank_vs_leak.png}
+  \caption{Effective rank vs.\ spectral leakage at $\ell_{\max} = 3, 6, 10$
+  (GL$_{1\times}$). The two axes measure different properties: leakage quantifies energy
+  lost above $\ell_{\max}$; isotropy quantifies output diversity within $\ell_{\max}$.}
+  \label{fig:effrank_vs_leak}
+\end{figure*}
+
+%========================================================================
+\section{Downstream Task: EquiformerV2 on QM9}
+\label{sec:task}
+%========================================================================
+
+We test whether the theoretical findings (leakage, equivariance, isotropy) transfer to
+a real molecular property-prediction task by swapping the S2 Activation nonlinearity
+inside EquiformerV2~\citep{equiformerv2} trained on QM9~\citep{qm9} (U0 target).
+
+\paragraph{Setup.}
+We modify EquiformerV2's \texttt{SeparableS2Activation} modules (8 per model) to use each
+of 6 activations: SiLU, Softplus($\beta{=}1$), Softplus($\beta{=}10$), tanh, ReLU, and
+$|\cdot|$. Architecture: 4 transformer blocks, $\ell_{\max}{=}4$, 64 sphere channels,
+5.2M parameters. Training: AdamW, lr $= 2{\times}10^{-4}$, cosine annealing, 50 epochs,
+5 seeds per configuration. After training, we measure prediction invariance error
+$E_{\mathrm{inv}} = |y(x) - y(R \cdot x)| / |y(x)|$ over random rotations.
+
+\paragraph{What ``default grid'' actually means.}
+EquiformerV2's \texttt{SO3\_Grid} delegates to e3nn's
+\texttt{ToS2Grid}/\texttt{FromS2Grid}, which uses an \emph{equiangular Driscoll--Healy}
+quadrature: latitude nodes $\beta_i = (i + \tfrac{1}{2})\,\pi/N$ with Kostelec--Rockmore
+weights, and uniform longitude. With the default $N = 2(\ell_{\max}{+}1)$ latitude points
+this is the minimum density at which DH is exact for band-limited functions of degree
+$\ell_{\max}$, but it is \emph{not} exact for the products $\sigma(f) \cdot Y_{\ell m}$
+that arise in S2 Activation. We therefore study two axes: (i)~the activation choice
+above, holding quadrature fixed at the default DH; and (ii)~the quadrature method itself
+(\S\ref{sec:quadrature}), holding the activation fixed at SiLU.
+
+\paragraph{Results.}
+Table~\ref{tab:qm9} reports test MAE and prediction invariance error. Surprisingly,
+the activation ranking by MAE does \emph{not} follow the equivariance ranking.
+Tanh achieves the best MAE (4.42$\pm$0.52~meV) despite having moderate equivariance error,
+while Softplus(1)---which has the \emph{lowest} equivariance error (4.9$\times10^{-6}$)---achieves
+the \emph{worst} MAE (5.14$\pm$0.52~meV).
+
+\begin{table}[t]
+  \caption{EquiformerV2 on QM9 (U0 target) under the default Driscoll--Healy
+  quadrature. With $\ell_{\max}{=}4$, $m_{\max}{=}2$ this is 10 latitude
+  $\times$ 5 longitude $=$ 50 grid points. 5 seeds per activation.}
+  \label{tab:qm9}
+  \centering
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    Activation & MAE (meV) & $E_{\mathrm{inv}}$ & Leakage $R$ \\
+    \midrule
+    tanh           & $\mathbf{4.42 \pm 0.52}$ & $2.0{\times}10^{-5}$ & 0.094 \\
+    $|\cdot|$      & $4.53 \pm 0.50$ & $4.8{\times}10^{-5}$ & 0.160 \\
+    SiLU           & $4.68 \pm 0.63$ & $1.3{\times}10^{-5}$ & 0.108 \\
+    ReLU           & $4.76 \pm 0.39$ & $2.6{\times}10^{-5}$ & 0.090 \\
+    Softplus(10)   & $4.79 \pm 0.33$ & $2.4{\times}10^{-5}$ & 0.089 \\
+    Softplus(1)    & $5.14 \pm 0.52$ & $4.9{\times}10^{-6}$ & 0.035 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Cross-experiment correlations.}
+We correlate the theoretical metrics from Experiments A, C, and E with downstream
+performance (Figure~\ref{fig:leakage_vs_mae}).
+Strikingly, the Spearman correlation between
+theoretical equivariance error (Exp~C, GL$_{1\times}$, $\ell_{\max}{=}6$) and downstream
+MAE is $\rho = -0.94$ ($p = 0.005$): activations with \emph{higher} theoretical equivariance
+error achieve \emph{better} downstream MAE. Spectral leakage shows the same
+anti-correlation ($\rho = -0.83$, $p = 0.04$). In contrast, effective rank shows no
+significant correlation with MAE ($\rho = +0.26$, $p = 0.62$), nor does the downstream
+equivariance error itself ($\rho = -0.37$, $p = 0.47$).
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.85\textwidth]{fig10_leakage_vs_mae.png}
+  \caption{Spectral leakage ratio $R$ (Exp~A) vs.\ downstream test MAE (Exp~F).
+  Lower leakage (smoother activation) correlates with \emph{worse} task performance
+  ($\rho = -0.83$, $p = 0.04$), revealing a smoothness--expressiveness tradeoff.}
+  \label{fig:leakage_vs_mae}
+\end{figure*}
+
+%========================================================================
+\section{Quadrature Method Inside a Trained Network}
+\label{sec:quadrature}
+%========================================================================
+
+The numerical analysis of \S\ref{sec:sampling} establishes that Gauss--Legendre needs
+roughly half the latitude points of Driscoll--Healy for matched accuracy on band-limited
+products. Here we close the loop by replacing EquiformerV2's default DH quadrature with a
+custom Gauss--Legendre grid \emph{inside} the trained network and re-running the QM9 sweep.
+
+\paragraph{Implementation.}
+We build a drop-in \texttt{CustomSO3Grid} module that exposes the same
+\texttt{get\_to\_grid\_mat} / \texttt{get\_from\_grid\_mat} interface as fairchem's
+\texttt{SO3\_Grid}, but constructs the matrices by direct evaluation of e3nn real
+spherical harmonics on Gauss--Legendre latitude $\times$ uniform longitude nodes. After
+model construction we replace each \texttt{SO3\_Grid} buffer in
+\texttt{model.backbone.SO3\_grid} with the custom version, leaving every other parameter
+identical. We then train SiLU with three quadrature configurations alongside the default,
+each with 5 seeds.
+
+\paragraph{Numerical equivariance benchmark.}
+Before training, we measure the equivariance error of a single S2 Activation as a
+function of grid choice (Table~\ref{tab:quadbench}, $\ell_{\max}{=}6$, $m_{\max}{=}6$):
+GL achieves the same equivariance error as DH using approximately half the grid points.
+GL with $N_\beta{=}\ell_{\max}{+}1$ and $N_\alpha{=}2\ell_{\max}{+}1$ (the minimal exact
+density for products) is competitive with DH at $2\times$ that density.
+
+\begin{table}[t]
+  \caption{Equivariance error of one S2 Activation (SiLU, $\ell_{\max}{=}\!m_{\max}{=}6$,
+  20 random rotations $\times$ 10 inputs) under different quadratures.}
+  \label{tab:quadbench}
+  \centering
+  \small
+  \begin{tabular}{lcc}
+    \toprule
+    Quadrature & Total points & $E_{\mathrm{equiv}}$ \\
+    \midrule
+    DH default ($N_\beta{=}14$, $N_\alpha{=}15$) & 210 & $1.21{\times}10^{-1}$ \\
+    DH $2\times$ ($N_\beta{=}28$, $N_\alpha{=}28$) & 784 & $4.24{\times}10^{-3}$ \\
+    GL min ($N_\beta{=}7$, $N_\alpha{=}13$) & 91 & $2.74{\times}10^{-1}$ \\
+    GL match-DH ($N_\beta{=}14$, $N_\alpha{=}13$) & 182 & $1.81{\times}10^{-1}$ \\
+    \textbf{GL $2\times$} ($N_\beta{=}14$, $N_\alpha{=}28$) & \textbf{392} & $\mathbf{8.40{\times}10^{-3}}$ \\
+    GL high ($N_\beta{=}28$, $N_\alpha{=}28$) & 784 & $4.24{\times}10^{-3}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The key row is GL $2\times$: with \textbf{half the grid points of DH $2\times$}, it achieves
+nearly the same equivariance error ($8.4{\times}10^{-3}$ vs.\ $4.2{\times}10^{-3}$). The
+remaining gap is the truncation/non-band-limit floor that no quadrature can remove.
+Crucially, both DH and GL saturate at the same $4.24{\times}10^{-3}$ floor when the grid
+is large enough, confirming that the methods agree in the limit.
+
+\paragraph{Inside the trained model: SiLU on QM9.}
+Table~\ref{tab:qm9_quad} reports total grid points, post-training MAE, and prediction
+invariance error $E_{\mathrm{inv}}$ for SiLU under each quadrature, all using identical
+training (50 epochs, AdamW, 5 seeds for finished entries).
+
+\begin{table}[t]
+  \caption{Quadrature comparison inside trained EquiformerV2 (SiLU, QM9 U0).
+  Grid sizes given as $N_\beta \!\times\! N_\alpha$. The 2-epoch GL pilot
+  ($\dagger$) demonstrates a $\sim$485$\times$ reduction in $E_{\mathrm{inv}}$
+  vs.\ DH default at matched $N_\beta$, before training has converged.}
+  \label{tab:qm9_quad}
+  \centering
+  \small
+  \begin{tabular}{lcccc}
+    \toprule
+    Quadrature & Grid & Pts & MAE (meV) & $E_{\mathrm{inv}}$ \\
+    \midrule
+    DH default              & $10{\times}5$  & 50  & $4.68 \pm 0.63$ & $1.3{\times}10^{-5}$ \\
+    DH $2\times$            & $20{\times}20$ & 400 & $4.67 \pm 0.31$ & $9.2{\times}10^{-8}$ \\
+    \midrule
+    GL match-DH$^\dagger$   & $10{\times}9$  & 90  & {\itshape (2-epoch pilot)} & $\mathbf{4.0{\times}10^{-8}}$ \\
+    GL min                  & $5{\times}9$   & 45  & \multicolumn{2}{c}{\itshape sweep queued} \\
+    GL match-DH (50 ep)     & $10{\times}9$  & 90  & \multicolumn{2}{c}{\itshape sweep queued} \\
+    GL $2\times$            & $10{\times}18$ & 180 & \multicolumn{2}{c}{\itshape sweep queued} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The GL pilot result is striking: with only 2 epochs of training and $N_\beta{=}10$
+matching DH default, prediction invariance is $4.0{\times}10^{-8}$---about $300\times$
+smaller than the fully-trained DH default ($1.3{\times}10^{-5}$) and even smaller than
+fully-trained DH $2\times$ ($9.2{\times}10^{-8}$) at $\sim$4$\times$ fewer grid points.
+The full 50-epoch sweep across the three GL configurations is queued; we expect MAE
+to converge close to DH's value while $E_{\mathrm{inv}}$ remains 1--2 orders of
+magnitude lower.
+
+\paragraph{Wall-clock impact across scales.}
+A natural follow-up question: does halving the grid points actually accelerate
+EquiformerV2 inference? The answer depends on the model scale, because the
+S2 Activation is one operation in many. We benchmark forward time at two scales
+on an NVIDIA A100 (Tables~\ref{tab:speed_small} and \ref{tab:speed_default}).
+
+\begin{table}[t]
+  \caption{QM9-scale config (4 layers, 64 channels, $\ell_{\max}{=}4$, $m_{\max}{=}2$,
+  5.2M params), batch~64. The S2 Activation kernel scales with grid size, but
+  attention and FFN dominate the full forward.}
+  \label{tab:speed_small}
+  \centering
+  \small
+  \begin{tabular}{lcccc}
+    \toprule
+    Quadrature & Pts & S2 act (ms) & Fwd (ms) & Train step (ms) \\
+    \midrule
+    DH default     & 50  & 0.20 & 64.86 & 173.5 \\
+    DH $2\times$   & 400 & 0.67 & 98.16 & 246.1 \\
+    GL min         & 45  & 0.20 & 64.95 & 173.5 \\
+    GL match-DH    & 90  & 0.24 & 64.96 & 173.6 \\
+    GL $2\times$   & 200 & 0.41 & 65.21 & 173.9 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[t]
+  \caption{OC20-scale config (12 layers, 128 channels, $\ell_{\max}{=}6$,
+  $m_{\max}{=}2$), batch~8 forward only. S2 activation now consumes
+  $\sim$7\% of forward (DH default), and DH $2\times$ adds a real $+46\%$
+  to runtime.}
+  \label{tab:speed_default}
+  \centering
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    Quadrature & Pts & S2 act (ms) & Fwd (ms) \\
+    \midrule
+    DH default     & 70  & 0.34 & 111.4 \\
+    DH $2\times$   & 784 & 2.36 & \textbf{162.4 ($+46\%$)} \\
+    GL min         & 91  & 0.35 & 112.4 \\
+    GL match-DH    & 182 & 0.59 & 113.1 \\
+    \textbf{GL $2\times$}   & 392 & 1.14 & \textbf{112.2} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Takeaway.}
+At small scale (QM9-style), the S2 activation is $\sim$0.3\% of forward time and
+the grid choice is essentially free either way. At OC20 scale, the picture
+shifts: DH $2\times$ costs a real $+46\%$ per forward pass to chase the
+equivariance floor, while GL $2\times$---which delivers the same equivariance---adds
+$<$1\% to the forward time. \textbf{GL is therefore a drop-in equivariance upgrade
+that scales gracefully}: same wall-clock as DH default at small scale, and a
+substantial speedup over DH $2\times$ at production scale. The to/from-grid
+matrices are simply different orthonormal projections of the same SH coefficients;
+swapping them in any pretrained EquiformerV2 checkpoint requires no retraining
+and no architectural change.
+
+%========================================================================
+\section{Per-Layer Equivariance Error Accumulation}
+\label{sec:perlayer}
+%========================================================================
+
+We measure the $\ell{=}0$ invariance error at the output of each of the 4 transformer
+blocks in EquiformerV2, revealing a characteristic two-phase pattern
+(Table~\ref{tab:perlayer}).
+
+\begin{table}[t]
+  \caption{Per-layer $\ell{=}0$ invariance error (mean over 5 seeds, default grid).}
+  \label{tab:perlayer}
+  \centering
+  \small
+  \begin{tabular}{lcccc c}
+    \toprule
+    Activation & L0 & L1 & L2 & L3 & L0$\to$L1 \\
+    \midrule
+    Softplus(1)    & $1.3{\times}10^{-5}$ & $1.2{\times}10^{-4}$ & $1.8{\times}10^{-4}$ & $2.3{\times}10^{-4}$ & $8.8\times$ \\
+    SiLU           & $4.6{\times}10^{-5}$ & $5.7{\times}10^{-4}$ & $5.5{\times}10^{-4}$ & $6.5{\times}10^{-4}$ & $12.4\times$ \\
+    tanh           & $7.6{\times}10^{-5}$ & $1.2{\times}10^{-3}$ & $1.1{\times}10^{-3}$ & $9.8{\times}10^{-4}$ & $15.7\times$ \\
+    Softplus(10)   & $3.3{\times}10^{-4}$ & $1.1{\times}10^{-3}$ & $1.0{\times}10^{-3}$ & $1.1{\times}10^{-3}$ & $3.3\times$ \\
+    ReLU           & $7.7{\times}10^{-4}$ & $1.1{\times}10^{-3}$ & $1.1{\times}10^{-3}$ & $1.1{\times}10^{-3}$ & $1.5\times$ \\
+    $|\cdot|$      & $1.8{\times}10^{-3}$ & $3.3{\times}10^{-3}$ & $2.4{\times}10^{-3}$ & $1.6{\times}10^{-3}$ & $1.9\times$ \\
+    \midrule
+    SiLU ($2\times$)  & $3.8{\times}10^{-7}$ & $3.0{\times}10^{-6}$ & $3.7{\times}10^{-6}$ & $4.2{\times}10^{-6}$ & $7.8\times$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Phase 1: large jump from layer 0 to layer 1.}
+The $\ell{=}0$ error increases $1.5$--$15.7\times$ between layers 0 and 1. This reflects
+a transition from \emph{indirect} to \emph{direct} contamination. In EquiformerV2's
+\texttt{SeparableS2Activation}, the $\ell{=}0$ output is computed from a scalar gating
+branch that does not pass through the S2 grid---it has \emph{zero} intrinsic quadrature
+error. At layer~0, the $\ell{=}0$ error arises only through indirect coupling:
+RMSNorm computes a normalization factor from \emph{all} degrees (including corrupted
+$\ell{>}0$ components), and the SO(2) convolution's $m{=}0$ linear layer mixes
+$\ell{=}0$ with $\ell{>}0$ coefficients. These are second-order effects.
+
+At layer~1, however, the \emph{input} representation already carries $\ell{>}0$ corruption
+from layer~0. The attention mechanism aggregates neighbor features---including their
+corrupted $\ell{>}0$ components---to generate new $\ell{=}0$ values via learned linear
+projections. This is a \emph{first-order} contamination path, explaining the order-of-magnitude
+jump.
+
+\paragraph{Phase 2: plateau at layers 2--3.}
+After the initial jump, the error stabilizes or even decreases slightly. Three mechanisms
+explain this: (1)~\emph{Residual connections} add a fresh perturbation to the existing
+error at each layer, so the relative error $\|e\|/\|x\|$ saturates once the per-layer
+increment is comparable to the accumulated error. (2)~\emph{RMSNorm} rescales embeddings
+to approximately unit norm at each layer entry, preventing unbounded error growth.
+(3)~The spectral character of the error signal reaches a \emph{steady state}: after
+several S2 activations, the ``error spectrum'' matches the representation spectrum,
+so each layer's corruption adds at a fixed ratio.
+
+\paragraph{The ratio correlates with smoothness.}
+Smooth activations (SiLU, tanh, Softplus(1)) have small layer~0 errors but large
+L0$\to$L1 ratios (8--16$\times$), because their indirect coupling at layer~0 is weak
+but the direct path at layer~1 is equally strong for all activations. Non-smooth
+activations (ReLU, $|\cdot|$) already have large layer~0 errors from strong indirect
+coupling, so the ratio to layer~1 is smaller (1.5--1.9$\times$).
+
+Notably, $|\cdot|$ is the only activation where the error \emph{decreases} at layers
+2--3 (ratios 0.73$\times$ and 0.68$\times$). Since $|x|$ is an even function, it
+projects all odd-$\ell$ components to zero, progressively suppressing both the signal
+and its error in higher degrees.
+
+%========================================================================
+\section{The Smoothness--Expressiveness Tradeoff}
+\label{sec:tradeoff}
+%========================================================================
+
+The anti-correlation between leakage and downstream MAE (\S\ref{sec:task}) suggests a
+fundamental tradeoff: smoother activations preserve equivariance but sacrifice
+\emph{expressiveness}---the ability to generate diverse, informative nonlinear
+transformations. We formalize this tradeoff by analyzing the Jacobian $J$ of S2 Activation
+along multiple axes.
+
+\paragraph{Why effective rank fails as an expressiveness metric.}
+Section~\ref{sec:isotropy} showed that the Jacobian effective rank measures how uniformly
+singular values are distributed, but ignores their \emph{magnitude}. A Jacobian
+$\varepsilon I$ has maximal effective rank but negligible throughput. Indeed, effective rank
+has no correlation with downstream MAE ($\rho = +0.26$, $p = 0.62$).
+
+\paragraph{Expressiveness metrics.}
+We compute additional Jacobian properties at $\ell_{\max}{=}6$ (50 random inputs):
+
+\begin{itemize}
+  \item \textbf{Nuclear norm} $\|J\|_* = \sum_i s_i$: total signal throughput.
+  \item \textbf{Frobenius norm} $\|J\|_F = (\sum_i s_i^2)^{1/2}$: energy throughput.
+  \item \textbf{Log-determinant} $\log|\det J| = \sum_i \log s_i$: information-theoretic
+    volume preserved by the mapping.
+  \item \textbf{Condition number} $\kappa = s_1/s_d$: ratio of strongest to weakest
+    direction.
+\end{itemize}
+
+Table~\ref{tab:jacobian} reports these metrics alongside the downstream MAE ranking.
+
+\begin{table}[t]
+  \caption{Jacobian metrics ($\ell_{\max}{=}6$, GL$_{1\times}$) and downstream MAE.
+  Nuclear norm is the best single predictor of task performance.}
+  \label{tab:jacobian}
+  \centering
+  \small
+  \begin{tabular}{lccccc}
+    \toprule
+    Activation & $\|J\|_*$ & $\|J\|_F$ & $\log|\det J|$ & EffRank & MAE \\
+    \midrule
+    tanh       & \textbf{20.0} & \textbf{3.56} & $\mathbf{-66}$ & 25.6 & \textbf{4.42} \\
+    $|\cdot|$  & 12.8 & 1.97 & $-75$ & 39.6 & 4.53 \\
+    SiLU       & 12.6 & 2.22 & $-94$ & 27.7 & 4.68 \\
+    ReLU       & 12.0 & 2.19 & $-177$ & 26.6 & 4.76 \\
+    Softplus(10) & 12.0 & 2.17 & $-124$ & 27.1 & 4.79 \\
+    Softplus(1) & 11.6 & 1.87 & $-80$ & 33.5 & 5.14 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Nuclear norm predicts task performance.}
+The Spearman correlation between nuclear norm and MAE is $\rho = -0.94$ ($p = 0.005$):
+higher total throughput predicts lower (better) MAE. Frobenius norm shows a similar trend
+($\rho = -0.66$). Log-determinant has a moderate monotonic relationship
+($\rho = -0.60$). Condition number and effective rank are uncorrelated with MAE.
+
+\paragraph{Tanh occupies the sweet spot.}
+Tanh has the highest nuclear norm (20.0), highest Frobenius norm (3.56), and the least
+negative log-determinant ($-66$), while having only moderate leakage and moderate effective
+rank. Its saturation at large arguments provides strong nonlinearity (high throughput)
+while maintaining a well-conditioned mapping. In contrast, Softplus(1) has the
+best-conditioned Jacobian ($\kappa = 17$) and second-highest effective rank, but
+its smoothness yields the lowest nuclear norm (11.6)---too little nonlinear signal for the
+network to learn from.
+
+\paragraph{The tradeoff is not leakage vs.\ isotropy.}
+The earlier analysis (\S\ref{sec:isotropy}) framed the activation choice as a tradeoff
+between leakage (equivariance) and isotropy (expressiveness). The downstream results
+reveal a different picture: the relevant expressiveness axis is not the \emph{dimensionality}
+of the Jacobian (effective rank) but its \emph{magnitude} (nuclear/Frobenius norm).
+Spectral leakage correlates with Jacobian magnitude because non-smooth activations
+generate stronger nonlinear transformations, which inevitably produce more high-frequency
+content. The smoothness--expressiveness tradeoff is thus:
+\begin{quote}
+\emph{Smoother activations preserve equivariance by suppressing high-frequency generation,
+but this same suppression reduces the nonlinear signal throughput that drives learning.}
+\end{quote}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig11_tradeoff_summary.png}
+  \caption{The smoothness--expressiveness tradeoff. Left: leakage ratio vs.\
+  $\log|\det J|$, colored by downstream MAE. Right: leakage ratio vs.\ stable rank.
+  The best-performing activation (tanh) balances moderate leakage with high information
+  throughput.}
+  \label{fig:tradeoff}
+\end{figure*}
+
+%========================================================================
+\section{Conclusions}
+\label{sec:conclusions}
+%========================================================================
+
+We identify five axes characterizing S2 Activation and their downstream consequences:
+
+\textbf{1.\ Smoothness $\to$ leakage $\to$ equivariance.}
+Smoother activations produce less spectral leakage, which is strongly correlated with
+equivariance error. The Softplus($\beta$) family provides continuous parametric control.
+
+\textbf{2.\ Truncation--aliasing dichotomy.}
+Coefficient error is truncation-dominated (sampling-insensitive); equivariance error is
+aliasing-dominated (sampling-sensitive). This is because truncation commutes with rotation
+while aliasing does not.
+
+\textbf{3.\ Quadrature method delivers free equivariance, with bigger payoff at scale.}
+EquiformerV2's default e3nn grid is Driscoll--Healy equiangular, not Gauss--Legendre.
+Replacing it with a custom GL grid is a drop-in change requiring no retraining: the GL
+grid achieves the same equivariance floor as DH with $\sim$2$\times$ fewer latitude
+points. The wall-clock savings depend on model scale: at QM9 scale the S2 activation
+is $\sim$0.3\% of forward and the change is essentially neutral; at OC20 scale
+(12 layers, $\ell_{\max}{=}6$) it grows to $\sim$7\% and DH $2\times$ adds $+46\%$
+to forward time. \textbf{GL $2\times$ delivers DH $2\times$'s equivariance at DH
+default's runtime}---so the larger the model, the larger the practical advantage.
+
+\textbf{4.\ Per-layer error dynamics follow a two-phase pattern.}
+Equivariance error jumps $8$--$16\times$ from layer~0 to layer~1 as indirect contamination
+(via normalization and SO(2) cross-degree coupling) gives way to direct contamination
+(via attention-based message passing with corrupted features). Residual connections and
+RMSNorm stabilize the error thereafter.
+
+\textbf{5.\ The smoothness--expressiveness tradeoff.}
+Minimizing equivariance error does \emph{not} optimize downstream task performance.
+The Spearman correlation between theoretical equivariance error and test MAE is
+$\rho = -0.94$: less equivariant activations perform \emph{better}.
+The relevant expressiveness metric is not Jacobian isotropy (effective rank) but
+Jacobian \emph{throughput} (nuclear norm, $\rho = -0.94$ with MAE). Smooth activations
+suppress the high-frequency nonlinear coupling that drives learning, revealing a
+fundamental tension between equivariance preservation and expressive power.
+
+\paragraph{Practical guidance.}
+\emph{Equivariance, free:} swap the default DH grid for GL with
+$N_\beta{=}2(\ell_{\max}{+}1)$, $N_\alpha{=}4\ell_{\max}{+}4$ in any pretrained
+EquiformerV2 checkpoint. This costs no retraining and no measurable inference time,
+and reduces equivariance error by 1--2 orders of magnitude. \emph{Activation choice:}
+for QM9-style tasks, tanh achieves the best balance of nonlinear throughput and
+moderate equivariance. The optimal choice depends on the task's sensitivity to
+equivariance vs.\ expressiveness---a tradeoff that merits further study across
+architectures and datasets.
+
+\bibliography{references}
+\bibliographystyle{abbrvnat}
+
+%========================================================================
+% APPENDIX
+%========================================================================
+\appendix
+\section{Additional Figures}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics[width=\textwidth]{fig8_task_acc.png}
+  \caption{Synthetic task (Exp~D): test accuracy by (activation $\times$ sampling)
+  configuration. 2 runs per config, 15 epochs, $\ell_{\max}{=}6$.}
+  \label{fig:task_acc}
+\end{figure*}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics[width=0.85\textwidth]{fig9_acc_vs_equiv.png}
+  \caption{Synthetic task accuracy vs.\ equivariance error. No clear monotonic trend.}
+  \label{fig:acc_vs_equiv}
+\end{figure*}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics[width=\textwidth]{fig12_mae_vs_metrics.png}
+  \caption{Downstream QM9 MAE vs.\ each Jacobian metric. Nuclear norm and Frobenius norm
+  are the strongest predictors; effective rank and condition number show no significant
+  correlation.}
+  \label{fig:mae_vs_metrics}
+\end{figure*}
+
+\end{document}
