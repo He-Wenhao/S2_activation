@@ -79,17 +79,25 @@ def main():
 
     # Annotate each point — push labels away from the dense cluster with
     # explicit absolute coordinates and connector lines where useful.
+    # Leader-line targets are pulled from the actual measured (x, y) so we
+    # don't hard-code stale coordinates.
+    by_label = {r["label"]: r for r in points}
+
+    def _leader(label_):
+        r = by_label.get(label_)
+        return (r["fwd_ms_mean"], r["equiv_err"]) if r is not None else None
+
     annotations = {
-        # label_xy_data, leader_target_xy_data, ha
-        "DH default":  ((130, 0.475), (111.83, 0.443),  "left"),
-        "GL min":      ((130, 0.405), (111.0,  0.429),  "left"),
-        "DH 2x":       ((160, 0.39),  (162.73, 0.327),  "center"),
-        "GL match-DH": ((140, 0.305), (112.23, 0.328),  "left"),
-        "GL 2x":       ((128, 0.355), (111.34, 0.328),  "left"),
+        # text_xy_data, draw_leader: bool, ha
+        "DH default":  ((130, 0.475), True,  "left"),
+        "GL min":      ((130, 0.405), True,  "left"),
+        "DH 2x":       ((160, 0.39),  True,  "center"),
+        "GL match-DH": ((140, 0.305), True,  "left"),
+        "GL 2x":       ((128, 0.355), True,  "left"),
     }
     for r in points:
-        text_xy, leader_to, ha = annotations.get(
-            r["label"], ((r["fwd_ms_mean"] + 4, r["equiv_err"]), None, "left")
+        text_xy, draw_leader, ha = annotations.get(
+            r["label"], ((r["fwd_ms_mean"] + 4, r["equiv_err"]), False, "left")
         )
         label = f"{r['label']}  ({r['n_beta']}×{r['n_alpha']}, {r['n_points']} pts)"
         ax.text(
@@ -99,6 +107,7 @@ def main():
                       facecolor="white", edgecolor="none", alpha=0.85),
             zorder=4,
         )
+        leader_to = _leader(r["label"]) if draw_leader else None
         if leader_to is not None:
             ax.plot(
                 [text_xy[0], leader_to[0]], [text_xy[1], leader_to[1]],

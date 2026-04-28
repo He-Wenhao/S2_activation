@@ -19,8 +19,8 @@
 
 \graphicspath{{figures/}}
 
-\title{Gauss--Legendre Quadrature is a Drop-in Equivariance Upgrade for
-EquiformerV2 with Free Inference Speedup at Matched Accuracy}
+\title{Gauss--Legendre Replaces Driscoll--Healy in EquiformerV2:\\
+A Drop-in 31\% Inference Speedup at Matched Equivariance}
 
 \author{%
   Anonymous Authors\\
@@ -52,9 +52,11 @@ run means with distinct QM9 batches per iteration). The wall-clock savings
 come entirely from the S2-activation kernel, which grows from $8.5\%$ to
 $39.1\%$ of forward time when DH is oversampled, while everything else
 (attention, FFN, normalization) is unchanged.
-We further verify on five 50-epoch DH-trained QM9 checkpoints that swapping
-in GL at inference, without any retraining, preserves predictions: test
-MAE shifts by $\leq 0.01$~eV (well within seed-to-seed training variance);
+We further verify on four 50-epoch DH-trained QM9 checkpoints (a smaller
+4-layer / $\ell_{\max}{=}4$ model, since publicly trained 12-layer fairchem
+checkpoints do not exist for this benchmark) that swapping in GL at
+inference, without any retraining, preserves predictions: test MAE shifts
+by $\leq 0.01$~eV (well within seed-to-seed training variance);
 trained-model prediction-invariance error is unchanged (the model has
 learned to compensate for its training-time grid, so the
 \emph{kernel-level} equivariance gain only translates to
@@ -140,18 +142,28 @@ run means with a $t$-distribution at $df{=}4$. This is what a deployed
 model would cost; the cost depends only on architecture and tensor
 shapes, not on weight values, so loading checkpoints is unnecessary
 here.
-(iii)~\emph{Drop-in on trained checkpoints}: load five actual 50-epoch
+(iii)~\emph{Drop-in on trained checkpoints}: load four actual 50-epoch
 QM9 checkpoints trained with DH default, swap in GL without any
 retraining or fine-tuning, and re-measure prediction invariance error
-and test MAE on the held-out test set. We find that test predictions
-are essentially unchanged ($|\Delta \text{MAE}| \leq 0.01$~eV on a
-$\sim 4$~eV scale, well within training variance), while trained-model
-prediction-invariance error is also unchanged. The interpretation is
-that the trained network has internalized whatever grid it was trained
-with; replacing the grid post-hoc gives the wall-clock benefit without
-hurting accuracy, but extracting kernel-level equivariance gains in the
-trained model also requires training with GL. We discuss this
-distinction in Sec.~``Drop-in vs.\ retraining''.
+and test MAE on the held-out test set. \textbf{Scope note}: these
+checkpoints come from a smaller, separately-trained architecture
+(4 layers, $\ell_{\max}{=}4$, $m_{\max}{=}2$; $\sim$5M params) than
+the one used for the headline timing measurement (12 layers,
+$\ell_{\max}{=}6$, fairchem default; $\sim$30M params). We do not
+train a 12-layer model from scratch in this paper because that would
+require multi-GPU resources; we instead establish the drop-in
+\emph{safety} on the smaller model and note that the wall-clock
+argument is architecture-level (\S(ii)) and therefore independent of
+this choice. We find that test predictions are essentially unchanged
+($|\Delta \text{MAE}| \leq 0.01$~eV on a $\sim$4~eV scale, well within
+training variance), while trained-model prediction-invariance error is
+also unchanged (ratio $1.00 \pm 0.02$ across configurations). The
+interpretation is that the trained network has internalized whatever
+grid it was trained with; replacing the grid post-hoc gives the
+wall-clock benefit without hurting accuracy, but extracting
+kernel-level equivariance gains \emph{in the trained model} also
+requires training with GL. We discuss this distinction in
+Sec.~``Drop-in vs.\ retraining''.
 
 The result is a clean Pareto improvement (Figure~\ref{fig:pareto}):
 GL with $14 \times 13$ latitude $\times$ longitude nodes ($182$ points)
@@ -180,7 +192,7 @@ substantially better kernel-level equivariance.
   GL match-DH ($14 \times 13$, 182 points) reaches the same equivariance
   as DH $2\times$ ($28\times 28$, 784 points) at $113.17 \pm 2.25$~ms
   instead of $164.66 \pm 1.62$~ms---a saving of $51.5 \pm 2.36$~ms
-  ($31\%$, $p < 10^{-4}$ from Welch's $t$-test on the $n=5$ run means).
+  ($31.3\%$, $p < 10^{-4}$ from Welch's $t$-test on the $n=5$ run means).
   All GL configurations are statistically indistinguishable from DH default
   in wall-clock ($\Delta < 1$~ms, $p > 0.4$).}
   \label{fig:pareto}
@@ -258,13 +270,17 @@ weight-independent properties of the kernel.
     between configurations (the non-S$^2$ portion of forward varies by
     only $1.5\%$ across all grids). At DH $2\times$ the kernel's share
     of forward time grows from $8.5\%$ to $39.1\%$.
-  \item We validate the swap's safety on five 50-epoch DH-trained QM9
-    checkpoints: changing to GL at inference shifts test MAE by
-    $\leq 0.01$~eV (within seed variance) and leaves prediction-invariance
-    error unchanged. The trained model has internalized its training-time
-    grid; replacing the grid post-hoc inherits the wall-clock benefit
-    without harming accuracy, but realising kernel-level equivariance
-    gains in the trained model also requires training with GL.
+  \item We validate the swap's safety on four 50-epoch DH-trained QM9
+    checkpoints (4-layer / $\ell_{\max}{=}4$ model from
+    Experiment~F; we do not have a 12-layer trained checkpoint to swap
+    into and therefore separate the architecture-level wall-clock
+    benchmark from the drop-in safety check): changing to GL at
+    inference shifts test MAE by $\leq 0.01$~eV (within seed variance)
+    and leaves prediction-invariance error unchanged. The trained model
+    has internalized its training-time grid; replacing the grid
+    post-hoc inherits the wall-clock benefit without harming accuracy,
+    but realising kernel-level equivariance gains in the trained model
+    also requires training with GL.
   \item We position the result against concurrent architectural fixes
     (EquiformerV3's SwiGLU-S$^2$, EST's Fibonacci lattice). GL operates
     on a different lever (the quadrature rule, not the activation or the

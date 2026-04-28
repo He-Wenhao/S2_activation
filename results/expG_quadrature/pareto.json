@@ -35,9 +35,11 @@
       "cheapest_dh": {"label": "DH 2x", "fwd_ms": 164.66},
       "cheapest_gl": {"label": "GL match-DH", "fwd_ms": 113.17},
       "savings_ms": 51.50,
-      "savings_pct": 31.3,
-      "savings_p_value": 0.0,
-      "savings_ci95_ms": 2.36
+      "savings_pct": 31.27,
+      "savings_p_value": 1.357735e-10,
+      "savings_p_value_test": "Welch's t-test on n=5 run means",
+      "savings_ci95_ms": 2.36,
+      "savings_t_stat": -51.5459
     }
   ]
 }

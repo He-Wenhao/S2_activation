@@ -108,6 +108,14 @@ away under GL.
    it times architecture-level forward cost. The companion experiment
    `dropin_pretrained.json` validates that swapping the grid in actual
    trained checkpoints preserves predictions.
+6. The drop-in safety check is run on a *smaller* architecture
+   (4 layers, lmax=4, mmax=2; ~5M params) than the one used for the
+   headline timing (12 layers, lmax=6, fairchem default; ~30M params),
+   because we do not have a publicly-trained 12-layer fairchem
+   checkpoint to swap into. The wall-clock argument is architecture-
+   level (depends only on tensor shapes), so the model-size mismatch
+   does not invalidate the timing claim. We do not extrapolate the
+   *trained-model* equivariance behavior across architectures.
 
 ## Earlier version vs this one
 
@@ -142,5 +150,9 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 - `verify_speedup_fairchem_default.json` — older V1 benchmark (kept for diff)
 - `breakdown.json` — per-operation S2-act timing inside the model
 - `dropin_pretrained.json` — drop-in swap on actual trained 4-layer checkpoints
+  (4 seeds: 123, 456, 789, 1024; the seed=42 directory is from a 2-epoch
+  pilot run with a different protocol and is excluded). Aggregate result:
+  test MAE shifts by $-0.004 \pm 0.004$~eV under GL match-DH (n=4),
+  invariance-error ratio $1.018 \pm 0.013$ (statistically zero change).
 - `report.tex`, `report.pdf` — short report in PDF
 - `SiLU_gl10x9_U0_seed42/` — end-to-end 2-epoch GL training pilot
