@@ -1,0 +1,361 @@
+{
+  "args": {
+    "seeds": [
+      42,
+      123,
+      456,
+      789,
+      1024
+    ],
+    "activation": "SiLU",
+    "orig_grid": "default",
+    "target": "U0",
+    "n_rotations": 10,
+    "n_equiv_batches": 20,
+    "n_test_batches": 50,
+    "out": "results/expG_quadrature/dropin_pretrained.json"
+  },
+  "device": "cuda",
+  "per_seed": [
+    {
+      "checkpoint": "SiLU_default_U0_seed42",
+      "seed": 42,
+      "trained_with": "default",
+      "metrics": {
+        "default": {
+          "test_mae": 160.94831909179686,
+          "pred_invariance_error": 1.86539941916059e-05,
+          "per_layer_l0_error_mean": {
+            "0": 1.914090827385031e-05,
+            "1": 0.0008303344528393856,
+            "2": 0.00046534972820406117,
+            "3": 0.0004280588182169208
+          }
+        },
+        "GL min": {
+          "test_mae": 160.95478118896483,
+          "test_mae_delta": 0.00646209716796875,
+          "pred_invariance_error": 1.8887727374469118e-05,
+          "pred_invariance_ratio_to_ref": 1.0125299268597603,
+          "per_layer_l0_error_mean": {
+            "0": 1.9070213228720036e-05,
+            "1": 0.0008262977642234377,
+            "2": 0.00046538242071210987,
+            "3": 0.0004282803425238546
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 5,
+          "n_alpha": 9
+        },
+        "GL match-DH": {
+          "test_mae": 160.9543426513672,
+          "test_mae_delta": 0.006023559570337511,
+          "pred_invariance_error": 1.9268873341152644e-05,
+          "pred_invariance_ratio_to_ref": 1.032962331993404,
+          "per_layer_l0_error_mean": {
+            "0": 1.921551820965253e-05,
+            "1": 0.0008293162893106516,
+            "2": 0.0004662168255855721,
+            "3": 0.0004294667202045107
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 9
+        },
+        "GL 2x": {
+          "test_mae": 160.95379608154298,
+          "test_mae_delta": 0.005476989746114214,
+          "pred_invariance_error": 1.832760452857034e-05,
+          "pred_invariance_ratio_to_ref": 0.9825029610450702,
+          "per_layer_l0_error_mean": {
+            "0": 1.9106476501618588e-05,
+            "1": 0.0008271183169473719,
+            "2": 0.0004684851721218306,
+            "3": 0.00043079309451675603
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 20
+        }
+      }
+    },
+    {
+      "checkpoint": "SiLU_default_U0_seed123",
+      "seed": 123,
+      "trained_with": "default",
+      "metrics": {
+        "default": {
+          "test_mae": 4.186633911132812,
+          "pred_invariance_error": 1.2903866967041489e-05,
+          "per_layer_l0_error_mean": {
+            "0": 8.653000213507251e-05,
+            "1": 0.00034301912553099474,
+            "2": 0.0005022084582374497,
+            "3": 0.0006259891028906844
+          }
+        },
+        "GL min": {
+          "test_mae": 4.178450927734375,
+          "test_mae_delta": -0.008182983398437038,
+          "pred_invariance_error": 1.304760672131512e-05,
+          "pred_invariance_ratio_to_ref": 1.0111392774461148,
+          "per_layer_l0_error_mean": {
+            "0": 8.617814258408949e-05,
+            "1": 0.0003413419569270417,
+            "2": 0.0005017172390446101,
+            "3": 0.0006190682864021633
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 5,
+          "n_alpha": 9
+        },
+        "GL match-DH": {
+          "test_mae": 4.184471740722656,
+          "test_mae_delta": -0.0021621704101564276,
+          "pred_invariance_error": 1.2801846047653099e-05,
+          "pred_invariance_ratio_to_ref": 0.9920937716074594,
+          "per_layer_l0_error_mean": {
+            "0": 8.695417285618525e-05,
+            "1": 0.0003443889211340745,
+            "2": 0.0005032698349076796,
+            "3": 0.0006265413074487536
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 9
+        },
+        "GL 2x": {
+          "test_mae": 4.185186157226562,
+          "test_mae_delta": -0.001447753906250071,
+          "pred_invariance_error": 1.2751156546776009e-05,
+          "pred_invariance_ratio_to_ref": 0.9881655304835731,
+          "per_layer_l0_error_mean": {
+            "0": 8.70376886668682e-05,
+            "1": 0.00034487095903296084,
+            "2": 0.0005005823618071917,
+            "3": 0.000623501868732971
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 20
+        }
+      }
+    },
+    {
+      "checkpoint": "SiLU_default_U0_seed456",
+      "seed": 456,
+      "trained_with": "default",
+      "metrics": {
+        "default": {
+          "test_mae": 3.3854345703125,
+          "pred_invariance_error": 1.1310726430223693e-05,
+          "per_layer_l0_error_mean": {
+            "0": 5.828971895350918e-05,
+            "1": 0.000343987517240545,
+            "2": 0.0005780904233894563,
+            "3": 0.0006863303410805039
+          }
+        },
+        "GL min": {
+          "test_mae": 3.385601806640625,
+          "test_mae_delta": 0.00016723632812487566,
+          "pred_invariance_error": 1.1537202779940788e-05,
+          "pred_invariance_ratio_to_ref": 1.0200231480368867,
+          "per_layer_l0_error_mean": {
+            "0": 5.80334037088134e-05,
+            "1": 0.00034512405407650243,
+            "2": 0.0005729725665939435,
+            "3": 0.0006886525769045093
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 5,
+          "n_alpha": 9
+        },
+        "GL match-DH": {
+          "test_mae": 3.390240478515625,
+          "test_mae_delta": 0.004805908203124876,
+          "pred_invariance_error": 1.1346553037137196e-05,
+          "pred_invariance_ratio_to_ref": 1.0031674894742189,
+          "per_layer_l0_error_mean": {
+            "0": 5.7225135018752914e-05,
+            "1": 0.000344853777878532,
+            "2": 0.0005830215831002347,
+            "3": 0.0006782724185048483
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 9
+        },
+        "GL 2x": {
+          "test_mae": 3.3911697387695314,
+          "test_mae_delta": 0.005735168457031481,
+          "pred_invariance_error": 1.179594401221328e-05,
+          "pred_invariance_ratio_to_ref": 1.0428988876163625,
+          "per_layer_l0_error_mean": {
+            "0": 5.9634389254424136e-05,
+            "1": 0.0003454386381150884,
+            "2": 0.0005804436078243383,
+            "3": 0.0006908791484206508
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 20
+        }
+      }
+    },
+    {
+      "checkpoint": "SiLU_default_U0_seed789",
+      "seed": 789,
+      "trained_with": "default",
+      "metrics": {
+        "default": {
+          "test_mae": 3.9476873779296877,
+          "pred_invariance_error": 1.4806320252151251e-05,
+          "per_layer_l0_error_mean": {
+            "0": 3.736837774115025e-05,
+            "1": 0.00043871156925461626,
+            "2": 0.0006084169115090155,
+            "3": 0.0009644285143536157
+          }
+        },
+        "GL min": {
+          "test_mae": 3.9505514526367187,
+          "test_mae_delta": 0.0028640747070309835,
+          "pred_invariance_error": 1.5833137379684044e-05,
+          "pred_invariance_ratio_to_ref": 1.0693499201723402,
+          "per_layer_l0_error_mean": {
+            "0": 3.734468912606687e-05,
+            "1": 0.0004381494993992406,
+            "2": 0.0006061880383574151,
+            "3": 0.0009803755492405412
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 5,
+          "n_alpha": 9
+        },
+        "GL match-DH": {
+          "test_mae": 3.950728454589844,
+          "test_mae_delta": 0.0030410766601560724,
+          "pred_invariance_error": 1.5264038549812117e-05,
+          "pred_invariance_ratio_to_ref": 1.030913710487544,
+          "per_layer_l0_error_mean": {
+            "0": 3.750081763735965e-05,
+            "1": 0.00043804540577972213,
+            "2": 0.0006088937503738018,
+            "3": 0.0009666462771047504
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 9
+        },
+        "GL 2x": {
+          "test_mae": 3.9440072631835936,
+          "test_mae_delta": -0.0036801147460940875,
+          "pred_invariance_error": 1.5710584698113653e-05,
+          "pred_invariance_ratio_to_ref": 1.0610728682456412,
+          "per_layer_l0_error_mean": {
+            "0": 3.7193187294523005e-05,
+            "1": 0.0004363699531651889,
+            "2": 0.0006092685994258291,
+            "3": 0.0009683484364241654
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 20
+        }
+      }
+    },
+    {
+      "checkpoint": "SiLU_default_U0_seed1024",
+      "seed": 1024,
+      "trained_with": "default",
+      "metrics": {
+        "default": {
+          "test_mae": 4.160865478515625,
+          "pred_invariance_error": 1.1119122428484471e-05,
+          "per_layer_l0_error_mean": {
+            "0": 2.907956834213392e-05,
+            "1": 0.0008631684765345829,
+            "2": 0.0005365759365314224,
+            "3": 0.0005003935521209063
+          }
+        },
+        "GL min": {
+          "test_mae": 4.160604248046875,
+          "test_mae_delta": -0.00026123046874992895,
+          "pred_invariance_error": 1.0951183653885008e-05,
+          "pred_invariance_ratio_to_ref": 0.9848964002618368,
+          "per_layer_l0_error_mean": {
+            "0": 2.925504762402132e-05,
+            "1": 0.0008573286637031169,
+            "2": 0.0005395867654522625,
+            "3": 0.0005008797618511822
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 5,
+          "n_alpha": 9
+        },
+        "GL match-DH": {
+          "test_mae": 4.152618408203125,
+          "test_mae_delta": -0.008247070312499716,
+          "pred_invariance_error": 1.1021954402682775e-05,
+          "pred_invariance_ratio_to_ref": 0.9912611785303509,
+          "per_layer_l0_error_mean": {
+            "0": 2.9312062864107576e-05,
+            "1": 0.0008604973772491399,
+            "2": 0.0005414286858469745,
+            "3": 0.0005075451575835734
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 9
+        },
+        "GL 2x": {
+          "test_mae": 4.164800720214844,
+          "test_mae_delta": 0.003935241699219105,
+          "pred_invariance_error": 1.068403244594787e-05,
+          "pred_invariance_ratio_to_ref": 0.960870114945222,
+          "per_layer_l0_error_mean": {
+            "0": 2.9052685576933645e-05,
+            "1": 0.0008573589469236997,
+            "2": 0.0005391661911667674,
+            "3": 0.000504915328517253
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 20
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "default": {
+      "test_mae_delta_mean": 0.0,
+      "test_mae_delta_std": 0.0,
+      "inv_err_ratio_mean": 1.0,
+      "inv_err_ratio_std": 0.0,
+      "n_seeds": 5
+    },
+    "GL min": {
+      "test_mae_delta_mean": 0.00020983886718752842,
+      "test_mae_delta_std": 0.0054036767258773865,
+      "inv_err_ratio_mean": 1.0195877345553879,
+      "inv_err_ratio_std": 0.030826702930813448,
+      "n_seeds": 5
+    },
+    "GL match-DH": {
+      "test_mae_delta_mean": 0.0006922607421924632,
+      "test_mae_delta_std": 0.0058932418021234185,
+      "inv_err_ratio_mean": 1.0100796964185954,
+      "inv_err_ratio_std": 0.02051267818166703,
+      "n_seeds": 5
+    },
+    "GL 2x": {
+      "test_mae_delta_mean": 0.0020039062500041283,
+      "test_mae_delta_std": 0.004299323660888286,
+      "inv_err_ratio_mean": 1.0071020724671738,
+      "inv_err_ratio_std": 0.042706444399971746,
+      "n_seeds": 5
+    }
+  }
+}

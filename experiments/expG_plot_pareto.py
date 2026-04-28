@@ -24,17 +24,19 @@ def main():
     with open(src) as f:
         data = json.load(f)
 
-    # Use kernel-level timing for GL min (where wall-clock wasn't separately
-    # measured); approximation: ~111 ms (matches DH default at similar pts).
+    # Only plot points with directly-measured wall-clock. If a config has
+    # `fwd_ms_mean=None` in pareto.json, we OMIT it from the Pareto figure
+    # rather than silently substituting an estimate (per adversarial review).
     points = []
+    omitted = []
     for r in data["results"]:
         if r["fwd_ms_mean"] is None:
-            r["fwd_ms_mean"] = 111.0
-            r["fwd_ms_ci95"] = 1.0
-            r["estimated"] = True
-        else:
-            r["estimated"] = False
+            omitted.append(r["label"])
+            continue
+        r["estimated"] = False
         points.append(r)
+    if omitted:
+        print(f"Omitting (no measured wall-clock): {omitted}")
 
     fig, ax = plt.subplots(figsize=(8.5, 5.5))
 
@@ -90,8 +92,6 @@ def main():
             r["label"], ((r["fwd_ms_mean"] + 4, r["equiv_err"]), None, "left")
         )
         label = f"{r['label']}  ({r['n_beta']}×{r['n_alpha']}, {r['n_points']} pts)"
-        if r["estimated"]:
-            label += " [est.]"
         ax.text(
             text_xy[0], text_xy[1], label,
             fontsize=8.7, ha=ha, va="center",

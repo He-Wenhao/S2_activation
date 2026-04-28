@@ -40,30 +40,21 @@ so the $+31\%$ savings here is a lower bound for the production model.
 The 24 modules $=$ $2 \times$ num\_layers (one S2 act in graph attention
 $+$ one in FFN per \texttt{TransBlockV2}).
 
-\begin{center}
-\small
-\begin{tabular}{llcr}
-\toprule
-Config       & Method                              & Grid (lat $\times$ lon) & Points \\
-\midrule
-DH default   & e3nn equiangular                    & 14 $\times$ 5  & 70 \\
-DH 2$\times$ & DH with \texttt{resolution=4(L+1)}  & 28 $\times$ 28 & 784 \\
-GL min       & custom GL                           & 7 $\times$ 13  & 91 \\
-GL match-DH  & custom GL                           & 14 $\times$ 13 & 182 \\
-GL 2$\times$ & custom GL                           & 14 $\times$ 28 & 392 \\
-\bottomrule
-\end{tabular}
-\end{center}
-
 \section*{Two measurements at the same (lmax, mmax)}
 
 \textbf{Equivariance error} of one S2-Act kernel (random coefficients,
 5 rotations $\times$ 10 inputs); SiLU activation. \emph{Source:}
 \texttt{verify\_gl\_grid.py}.
 
-\textbf{Wall-clock} for one full forward (QM9, batch$=$8), 90 measurements
-per config (3 runs $\times$ 30 iter), \texttt{cuda.sync()} around each, fresh
-model per config. \emph{Source:} \texttt{verify\_speedup\_fairchem\_default.json}.
+\textbf{Wall-clock} for one full forward (QM9, batch$=$8). Protocol:
+5 independent runs per config; each run uses 10 warmup $+$ 30 measured
+forwards on \emph{distinct} QM9 batches drawn without replacement
+(no batch reuse within a run, fresh RNG seed per run).
+\texttt{cuda.sync()} around every measurement; fresh model construction
+per (run, config). 95\% CI is reported as
+$t_{n_\text{runs}-1, 0.975} \times \mathrm{s.e.}(\text{run\_means})$
+with $n_\text{runs}=5$ as the unit of replication. \emph{Source:}
+\texttt{verify\_speedup\_v2.json}.
 
 \section*{Combined results}
 
@@ -73,11 +64,11 @@ model per config. \emph{Source:} \texttt{verify\_speedup\_fairchem\_default.json
 \toprule
 Config & Pts & Equiv err & Fwd (ms, 95\% CI) \\
 \midrule
-DH default                   & 70  & $4.43\!\times\!10^{-1}$ & $111.83 \pm 0.79$ \\
-\textbf{DH 2$\times$}        & 784 & $\mathbf{3.27\!\times\!10^{-1}}$ & $\mathbf{162.73 \pm 1.23}$ ($+45.5\%$) \\
-GL min                       & 91  & $4.29\!\times\!10^{-1}$ & $\sim$111 (matches DH default) \\
-\textbf{GL match-DH}         & 182 & $\mathbf{3.28\!\times\!10^{-1}}$ & $\mathbf{112.23 \pm 0.75}$ ($+0.4\%$ n.s.) \\
-\textbf{GL 2$\times$}        & 392 & $\mathbf{3.28\!\times\!10^{-1}}$ & $\mathbf{111.34 \pm 0.76}$ ($-0.4\%$ n.s.) \\
+DH default                   & 70  & $4.43\!\times\!10^{-1}$ & $113.50 \pm 1.87$ \\
+\textbf{DH 2$\times$}        & 784 & $\mathbf{3.27\!\times\!10^{-1}}$ & $\mathbf{164.66 \pm 1.62}$ ($+45.1\%$, $p<10^{-4}$) \\
+GL min                       & 91  & $4.29\!\times\!10^{-1}$ & $112.68 \pm 1.87$ ($-0.7\%$, n.s.) \\
+\textbf{GL match-DH}         & 182 & $\mathbf{3.28\!\times\!10^{-1}}$ & $\mathbf{113.17 \pm 2.25}$ ($-0.3\%$, n.s.) \\
+\textbf{GL 2$\times$}        & 392 & $\mathbf{3.28\!\times\!10^{-1}}$ & $\mathbf{112.61 \pm 2.35}$ ($-0.8\%$, n.s.) \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -87,17 +78,20 @@ GL min                       & 91  & $4.29\!\times\!10^{-1}$ & $\sim$111 (matche
 For target equiv err $= 3.28 \times 10^{-1}$ (the saturation floor at this mmax cropping):
 
 \begin{itemize}\setlength\itemsep{0pt}
-\item Cheapest DH: \textbf{DH 2$\times$ at 162.73 ms}
+\item Cheapest DH: \textbf{DH 2$\times$ at 164.66 ms}
   (DH default at 70 pts only reaches $4.43\!\times\!10^{-1}$, not enough)
-\item Cheapest GL: \textbf{GL match-DH at 112.23 ms}
-\item \textbf{Savings: 50.5 ms = $(162.73 - 112.23)/162.73 = 31.0\%$ time reduction}
+\item Cheapest GL: \textbf{GL match-DH at 113.17 ms}
+\item \textbf{Savings: $51.5 \pm 2.36$ ms = $-31.3\%$ time, $p < 10^{-4}$ from
+  Welch's t-test on $n=5$ run means}
 \end{itemize}
 
 \textbf{So: at matched equivariance accuracy, GL saves $\sim$31\% wall-clock per
 forward.}
 
 Equivalently: GL achieves DH 2$\times$'s equivariance at the same wall-clock
-as DH default; the $+50.5$ ms premium goes away.
+as DH default (the GL-vs-DH-default differences are statistically zero).
+The $+51.5$ ms premium that DH pays to reach the equivariance floor goes
+away under GL.
 
 \section*{Caveats}
 
@@ -107,32 +101,20 @@ as DH default; the $+50.5$ ms premium goes away.
 \item Equivariance is measured on \emph{one} S2-Act kernel with random
   inputs, not on a trained model's intermediate features. Trained-model
   features are smoother (absolute equiv numbers will be much lower); the
-  \emph{ranking} between quadratures should be preserved.
-\item The kernel-level equivariance gap between GL match-DH ($3.28\!\times\!10^{-1}$)
-  and DH 2$\times$ ($3.27\!\times\!10^{-1}$) is within rounding --- they really
-  are the same accuracy.
+  \emph{ranking} between quadratures is what is claimed to transfer.
+  See \texttt{dropin\_pretrained.json} for validation on actual
+  4-layer trained checkpoints.
+\item The kernel-level equivariance gap between GL match-DH and DH 2$\times$
+  is within rounding ($3.28\!\times\!10^{-1}$ vs $3.27\!\times\!10^{-1}$).
 \item The mmax$=$2 cropping caps achievable equivariance at $\sim$0.328
   regardless of grid; lower error needs mmax$=$lmax (architectural change).
-  At lmax$=$mmax both methods can reach $\sim$4$\times$10$^{-3}$ floor; there
-  GL needs roughly half the latitude points of DH (see
+  At lmax$=$mmax both methods can reach a $\sim$4$\times$10$^{-3}$ floor;
+  there GL needs roughly half the latitude points of DH (see
   \texttt{verify\_gl\_grid.py}).
-\item We did not measure end-to-end equivariance on a fully trained
-  fairchem default model. The matched-accuracy speedup claim rests on the
-  kernel-level Pareto.
+\item The wall-clock benchmark above does NOT load pretrained weights; it
+  times architecture-level forward cost. The cost depends only on
+  architecture and tensor shapes, not on weight values.
 \end{enumerate}
-
-\section*{Earlier vs revised framing}
-
-The previous report claimed ``DH 2$\times$ costs $+45.5\%$ over DH default'',
-which was correct but compared different equivariance levels. The fairer claim:
-
-\begin{quote}
-Switching DH 2$\times$ $\rightarrow$ GL match-DH saves \textbf{31\% wall-clock
-per forward} while preserving the same equivariance error.
-Switching DH default $\rightarrow$ GL match-DH is \textbf{free} (same wall-clock)
-and substantially improves equivariance ($4.43\!\times\!10^{-1}
-\rightarrow 3.28\!\times\!10^{-1}$).
-\end{quote}
 
 \section*{Reproduce}
 
@@ -140,11 +122,13 @@ and substantially improves equivariance ($4.43\!\times\!10^{-1}
 module load pytorch/2.6.0-1
 # Equivariance for all configs at lmax=6, mmax=2
 python3 experiments/verify_gl_grid.py
-# Wall-clock: rigorous 3-run verification
+# Wall-clock: rigorous IID protocol, 5 runs x 30 distinct batches
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-  python3 experiments/expG_verify_speedup.py \
-    --config fairchem_default --batch_size 8 \
-    --n_repeats 3 --n_iter 30 --n_warmup 20
+  python3 experiments/expG_verify_speedup_v2.py \
+    --batch_size 8 --n_runs 5 --n_iter 30 --n_warmup 10
+# Drop-in test on actual trained checkpoints (small model)
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  python3 experiments/expG_dropin_pretrained.py
 \end{lstlisting}
 
 \end{document}

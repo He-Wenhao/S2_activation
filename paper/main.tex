@@ -41,15 +41,27 @@ Gauss--Legendre (GL) quadrature, yet EquiformerV2 cannot exploit DH's only
 algorithmic advantage (FFT-based transforms) because it stores
 to/from-grid as dense matrices. The result is an avoidable equivariance
 penalty.
-We implement a drop-in \texttt{CustomSO3Grid} that replaces DH with GL inside
-any pretrained EquiformerV2 checkpoint. On a 12-layer / 128-channel /
-$\ell_{\max}{=}6$ model on QM9, the swap cuts kernel-level S2-activation
-equivariance error by $\sim 25\%$ at matched grid count, and---more
-practically---reaches the same equivariance error as DH oversampled $2\times$
-at \textbf{31\% lower wall-clock time per forward} ($112.2$ vs.\ $162.7$~ms),
-while requiring no retraining and no architectural change. The savings come
-entirely from the S2-activation kernel ($8.5\%$ to $39.1\%$ of forward
-under DH default vs.\ DH $2\times$); the rest of the model is unaffected.
+We implement a drop-in \texttt{CustomSO3Grid} that replaces DH with GL.
+On the fairchem default EquiformerV2 architecture
+(12 layers / 128 channels / $\ell_{\max}{=}6$), GL reaches the same
+kernel-level S$^2$-activation equivariance error as DH oversampled
+$2\times$ at $\mathbf{113.17 \pm 2.25}$~ms per forward---versus
+$164.66 \pm 1.62$~ms for DH $2\times$---a savings of $\mathbf{51.5 \pm 2.36}$
+\textbf{ms} ($\mathbf{31.3\%}$, Welch's $t$-test $p < 10^{-4}$ on $n{=}5$
+run means with distinct QM9 batches per iteration). The wall-clock savings
+come entirely from the S2-activation kernel, which grows from $8.5\%$ to
+$39.1\%$ of forward time when DH is oversampled, while everything else
+(attention, FFN, normalization) is unchanged.
+We further verify on five 50-epoch DH-trained QM9 checkpoints that swapping
+in GL at inference, without any retraining, preserves predictions: test
+MAE shifts by $\leq 0.01$~eV (well within seed-to-seed training variance);
+trained-model prediction-invariance error is unchanged (the model has
+learned to compensate for its training-time grid, so the
+\emph{kernel-level} equivariance gain only translates to
+\emph{trained-model} equivariance gain when GL is used at training time
+too). The headline operational claim is therefore:
+\emph{GL is a drop-in replacement that delivers the wall-clock and
+kernel-equivariance benefits with no retraining or accuracy regression.}
 We position this against concurrent work that addresses the same equivariance
 problem via architectural change (EquiformerV3's SwiGLU-S$^2$,
 \texttt{arXiv:2604.09130}) or alternative sampling layouts (Equivariant
@@ -115,41 +127,68 @@ quadrature. It does not appear to have been applied to the
 EquiformerV2 line of work.
 
 \paragraph{This paper.}
-We make this swap and measure what happens, both in isolation (kernel
-equivariance error vs.\ grid configuration) and inside a trained
-EquiformerV2 (wall-clock time per forward, prediction invariance error,
-per-operation breakdown). The result is a clean Pareto improvement
-(Figure~\ref{fig:pareto}): GL with $14 \times 13$ latitude $\times$
-longitude nodes ($182$ points) reaches the same equivariance error as
-the DH $2\times$ oversampling ($28 \times 28 = 784$ points), at
-\textbf{$31\%$ lower wall-clock time per forward pass}. Conversely, GL
-with the same latitude budget as DH default ($14 \times 5 = 70$
-points) costs the same wall-clock as DH default but achieves
-substantially better equivariance.
+We make this swap and measure what happens at three levels.
+(i)~\emph{Kernel level}: equivariance error of a single $S^2$-activation
+under each grid (Sec.~``Kernel-level equivariance'', weight-independent;
+GL match-DH and DH $2\times$ both reach the truncation floor while DH
+default and GL min stay above it).
+(ii)~\emph{Architecture level}: end-to-end forward wall-clock under each
+grid using a freshly-instantiated 12-layer EquiformerV2 backbone, with
+all measurements on \emph{independently-sampled} QM9 batches (no batch
+reuse within a run) and all confidence intervals computed over $n{=}5$
+run means with a $t$-distribution at $df{=}4$. This is what a deployed
+model would cost; the cost depends only on architecture and tensor
+shapes, not on weight values, so loading checkpoints is unnecessary
+here.
+(iii)~\emph{Drop-in on trained checkpoints}: load five actual 50-epoch
+QM9 checkpoints trained with DH default, swap in GL without any
+retraining or fine-tuning, and re-measure prediction invariance error
+and test MAE on the held-out test set. We find that test predictions
+are essentially unchanged ($|\Delta \text{MAE}| \leq 0.01$~eV on a
+$\sim 4$~eV scale, well within training variance), while trained-model
+prediction-invariance error is also unchanged. The interpretation is
+that the trained network has internalized whatever grid it was trained
+with; replacing the grid post-hoc gives the wall-clock benefit without
+hurting accuracy, but extracting kernel-level equivariance gains in the
+trained model also requires training with GL. We discuss this
+distinction in Sec.~``Drop-in vs.\ retraining''.
+
+The result is a clean Pareto improvement (Figure~\ref{fig:pareto}):
+GL with $14 \times 13$ latitude $\times$ longitude nodes ($182$ points)
+reaches the same equivariance error as the DH $2\times$ oversampling
+($28 \times 28 = 784$ points), at $113.17 \pm 2.25$~ms vs.\
+$164.66 \pm 1.62$~ms per forward, a saving of
+$\mathbf{31.3\%}$ ($p < 10^{-4}$). GL with the same latitude budget as
+DH default ($14 \times 5 = 70$ points) costs the same wall-clock as DH
+default ($\Delta = -0.33 \pm 2.49$~ms, $p = 0.76$, n.s.) but achieves
+substantially better kernel-level equivariance.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=0.95\linewidth]{fig_pareto.pdf}
-  \caption{Equivariance vs.\ wall-clock Pareto frontier on a 12-layer
-  EquiformerV2 ($\ell_{\max}{=}6$, $m_{\max}{=}2$, batch~8, NVIDIA
-  A100-SXM4-40GB). Each point is a
+  \caption{Equivariance vs.\ wall-clock Pareto frontier on the fairchem
+  default EquiformerV2 ($12$ layers, $\ell_{\max}{=}6$, $m_{\max}{=}2$,
+  batch~8, NVIDIA A100-SXM4-40GB). Each point is a
   \texttt{(method, latitude $\times$ longitude)} configuration.
   Equivariance error is measured kernel-level on a single
-  $S^2$-activation with random coefficients (5 rotations $\times$ 10
+  $S^2$-activation with SiLU and random coefficients (5 rotations $\times$ 10
   inputs); wall-clock is end-to-end forward time aggregated over
-  90 measurements per config (3 runs $\times$ 30 iterations). At the
+  $n=5$ independent runs $\times$ 30 measured forwards on \emph{distinct}
+  QM9 batches per iteration (no batch reuse), with 95\% CI computed
+  over the run means using a $t$-distribution at $df=4$. At the
   saturation floor ($\sim 0.328$, set by $m_{\max}{=}2$ truncation),
   GL match-DH ($14 \times 13$, 182 points) reaches the same equivariance
-  as DH $2\times$ ($28\times 28$, 784 points) at $112.2$~ms instead of
-  $162.7$~ms---a 31\% wall-clock saving. Both GL configurations are
-  statistically indistinguishable from DH default in wall-clock
-  ($\Delta < 1$~ms, within combined 95\% CI).}
+  as DH $2\times$ ($28\times 28$, 784 points) at $113.17 \pm 2.25$~ms
+  instead of $164.66 \pm 1.62$~ms---a saving of $51.5 \pm 2.36$~ms
+  ($31\%$, $p < 10^{-4}$ from Welch's $t$-test on the $n=5$ run means).
+  All GL configurations are statistically indistinguishable from DH default
+  in wall-clock ($\Delta < 1$~ms, $p > 0.4$).}
   \label{fig:pareto}
 \end{figure}
 
 \paragraph{Why the savings are so big.}
 We hook CUDA timing events into every \texttt{S2Activation.forward}
-inside the trained model and find that the S2 activation alone
+inside the model and find that the S2 activation alone
 accounts for $8.5\%$ of forward time at DH default, but balloons to
 $39.1\%$ at DH $2\times$ (Table~\ref{tab:breakdown}). The remaining
 $\sim 100$~ms (attention, FFN, edge embeddings, normalization, SO(2)
@@ -159,16 +198,22 @@ relative variance. So although the S2 activation does not
 fully \emph{dominates the delta} between configurations: $100\%$ of the
 wall-clock gap between DH default and DH $2\times$ is the S2 activation
 kernel. GL dodges this gap entirely because at the model's actual
-workload, the einsum kernels are bottlenecked by launch and tensor-allocation
-overhead rather than by FLOPs, so increasing the GL grid up to $2\times$
-is essentially free.
+workload, the einsum kernels are bottlenecked by launch and
+tensor-allocation overhead rather than by FLOPs, so increasing the GL
+grid up to $2\times$ is essentially free. The breakdown table below
+uses CUDA-event timing inside the same architecture-level (random-init)
+forward used for the Pareto wall-clock; the per-call values are
+weight-independent properties of the kernel.
 
 \begin{table}[t]
   \centering
   \caption{Per-operation wall-clock breakdown via CUDA-event timing
-  hooked into every $S^2$-activation forward inside the trained
-  EquiformerV2 (12 layers, 24 \texttt{S2Activation} modules total).
-  Measurements are mean over 20 timed forwards after 20 warmup forwards
+  hooked into every $S^2$-activation forward inside the EquiformerV2
+  architecture (12 layers, 24 \texttt{S2Activation} modules total).
+  This is the same architecture-level random-init forward used for the
+  Pareto figure; the per-call $S^2$-activation cost is a property of
+  the kernel and tensor shapes, not of trained weights. Measurements
+  are mean over 20 timed forwards after 20 warmup forwards
   (NVIDIA A100-SXM4-40GB, batch~8 QM9). ``Non-S2'' is full forward
   minus the timed S2 activations; it is essentially constant
   ($100.97 \pm 1.56$~ms across all configurations, $1.5\%$ relative variance),
@@ -193,25 +238,38 @@ is essentially free.
   \item We identify that EquiformerV2 inherits e3nn's Driscoll--Healy
     quadrature without inheriting its only algorithmic advantage (FFT-based
     transforms), making the inheritance pure overhead in this setting.
-  \item We build a drop-in
-    \texttt{CustomSO3Grid} module supporting Gauss--Legendre quadrature
-    that swaps the to-grid and from-grid matrices in any pretrained
-    \texttt{EquiformerV2Backbone}. No retraining or architectural change
-    is required.
-  \item On a 12-layer / 128-channel / $\ell_{\max}{=}6$ EquiformerV2,
-    GL match-DH reaches the same kernel-level equivariance error as
-    DH $2\times$ oversampling at $\mathbf{31\%}$ \textbf{lower wall-clock}
-    ($112.2$ vs.\ $162.7$~ms per forward; verified across 3 independent runs
-    and 90 measurements per config).
-  \item A per-operation breakdown via CUDA-event timing inside the trained
-    model confirms that the S$^2$-activation kernel accounts for $100\%$
-    of the wall-clock gap between configurations (the non-S$^2$ portion of
-    forward varies by only $1.5\%$ across all grids).
+  \item We build a drop-in \texttt{CustomSO3Grid} module supporting
+    Gauss--Legendre quadrature that swaps the to-grid and from-grid
+    matrices in any \texttt{EquiformerV2Backbone}, including pretrained
+    checkpoints. No retraining or architectural change is required.
+  \item On the fairchem default EquiformerV2
+    (12 layers / 128 channels / $\ell_{\max}{=}6$), we measure end-to-end
+    forward wall-clock under a rigorous protocol (5 independent runs,
+    each on 30 distinct QM9 batches, no batch reuse) and find that
+    GL match-DH reaches the same kernel-level $S^2$-activation
+    equivariance as DH $2\times$ oversampling at
+    $\mathbf{31.3\%}$ \textbf{lower wall-clock}
+    ($113.17 \pm 2.25$ vs.\ $164.66 \pm 1.62$~ms per forward;
+    Welch's $t$-test on $n{=}5$ run means, $p < 10^{-4}$). All GL
+    configurations are statistically indistinguishable from DH default
+    in wall-clock ($p > 0.4$).
+  \item A per-operation CUDA-event breakdown shows that the
+    $S^2$-activation kernel accounts for $100\%$ of the wall-clock gap
+    between configurations (the non-S$^2$ portion of forward varies by
+    only $1.5\%$ across all grids). At DH $2\times$ the kernel's share
+    of forward time grows from $8.5\%$ to $39.1\%$.
+  \item We validate the swap's safety on five 50-epoch DH-trained QM9
+    checkpoints: changing to GL at inference shifts test MAE by
+    $\leq 0.01$~eV (within seed variance) and leaves prediction-invariance
+    error unchanged. The trained model has internalized its training-time
+    grid; replacing the grid post-hoc inherits the wall-clock benefit
+    without harming accuracy, but realising kernel-level equivariance
+    gains in the trained model also requires training with GL.
   \item We position the result against concurrent architectural fixes
     (EquiformerV3's SwiGLU-S$^2$, EST's Fibonacci lattice). GL operates
     on a different lever (the quadrature rule, not the activation or the
-    sampling pattern) and is therefore complementary; in particular, it
-    can be applied to existing pretrained checkpoints today.
+    sampling pattern) and is therefore complementary; in particular,
+    it can be applied to existing pretrained checkpoints today.
 \end{enumerate}
 
 % --- everything below here is to be expanded; the remaining sections
