@@ -65,180 +65,203 @@ with the absolute floor fixed by the training-time grid.
 \label{sec:intro}
 %========================================================================
 
-\paragraph{The $S^2$ activation in equivariant atomistic networks.}
 The recent line of SO(3)-equivariant graph networks for molecular and
-materials property prediction~\cite{scn,escn,equiformerv2} builds
+materials property prediction~\cite{scn,escn,equiformerv2} represents
 per-node features as functions on the sphere, expanded in spherical
-harmonics (SH) up to a band limit $\ell_{\max}$. Their dominant
-nonlinearity is the \emph{$S^2$ activation}: project SH coefficients
-onto a finite grid on $S^2$, apply a scalar activation pointwise, then
-integrate back via quadrature. This operator is approximately
-equivariant in the continuous limit and exactly equivariant only when
-the quadrature integrates the relevant products of band-limited
-functions exactly.
+harmonics (SH) up to a band limit $\ell_{\max}$. The dominant
+nonlinearity in this design is the \emph{$S^2$ activation}: it
+projects SH coefficients onto a finite grid on $S^2$, applies a scalar
+activation pointwise, and integrates back via quadrature. This operator
+is exactly equivariant only when the quadrature integrates the relevant
+products of band-limited functions exactly; otherwise its equivariance
+violation propagates through the rest of the network.
 
-\paragraph{The known equivariance gap.}
-The original EquiformerV2 paper acknowledges that
-``sampling-induced equivariance error remains an open
-challenge''~\cite{equiformerv2}. The fairchem community has filed
-this issue (\texttt{FAIR-Chem/fairchem\#1068}, March 2025), where
-users observe equivariance error of order $\sim 10^{-2}$ at the
-default grid, dropping to $\sim 10^{-4}$ only at $1024^2$ grid
-points~\cite{fairchem1068}---a prohibitive cost. Two recent papers
-attack the same problem with different tools.
-\emph{EquiformerV3}~\cite{equiformerv3} replaces the $S^2$ activation
-with a SwiGLU-style activation that operates only on scalars and
-bilinear products, achieving a $50.6\%$ reduction in grid points but
-as an architectural change requiring retraining. \emph{Equivariant
-Spherical Transformer (EST)}~\cite{est} replaces the e3nn grid with
-a Fibonacci lattice---a heuristically more uniform sampling
-pattern---observing better empirical expressiveness on OC20.
+The size of this violation is well known to the community. The
+EquiformerV2 paper itself notes that ``sampling-induced equivariance
+error remains an open challenge''~\cite{equiformerv2}, and the fairchem
+issue tracker (\texttt{FAIR-Chem/fairchem\#1068}, March~2025) records
+users observing equivariance error of order $\sim 10^{-2}$ at the
+default grid and only $\sim 10^{-4}$ at $1024^2$ grid points---a
+prohibitive cost~\cite{fairchem1068}. Two recent papers attack the
+problem with different tools. EquiformerV3~\cite{equiformerv3}
+replaces the $S^2$ activation with a SwiGLU-style operator on scalars
+and bilinear products, achieving a $50\%$ reduction in grid points but
+requiring an architectural change and retraining. The Equivariant
+Spherical Transformer (EST)~\cite{est} replaces the e3nn grid with a
+Fibonacci lattice---a heuristically more uniform sampling pattern.
+What none of these works changes is the \emph{quadrature rule}.
 
-\paragraph{The lever none of these works pulls.}
-None of these works changes the \emph{quadrature rule}.
 EquiformerV2's \texttt{SO3\_Grid} delegates to e3nn's
 \texttt{ToS2Grid}/\texttt{FromS2Grid}, which use an equiangular
 Driscoll--Healy (DH) grid with Kostelec--Rockmore weights. This was a
-sensible inheritance because DH supports an FFT-based fast SH
-transform---the entire algorithmic reason e3nn was built around it.
-However, EquiformerV2 \emph{does not use the FFT}: its
+defensible inheritance because DH supports an FFT-based fast SH
+transform, the algorithmic property around which e3nn was originally
+designed. EquiformerV2, however, does not use the FFT: its
 \texttt{SO3\_Grid} precomputes \texttt{to\_grid\_mat} and
-\texttt{from\_grid\_mat} as dense matrices and applies them via
-\texttt{einsum} (Section~\ref{sec:bg}). Once committed to dense
-matmul, the question collapses to \emph{which set of nodes integrates
-band-limited products with the fewest points}, and the textbook
-answer is that DH is no longer optimal: classical numerical analysis
-has long known that Gauss--Legendre needs roughly half the latitude
-points of DH for matched
-exactness~\cite{shtools,glq_dh_planet,driscoll_healy}, and that
-Lebedev rules can do even better for spherical integrands of
-moderate degree.
+\texttt{from\_grid\_mat} as dense matrices and applies them through
+\texttt{einsum}~(\S\ref{sec:bg}). Once committed to dense matrix
+multiplication, the question collapses to ``which set of nodes
+integrates band-limited products with the fewest points?'' and the
+textbook answer is no longer Driscoll--Healy: Gauss--Legendre needs
+roughly half the latitude points of DH for matched
+exactness~\cite{shtools,glq_dh_planet,driscoll_healy}, and Lebedev
+rules can do better still for moderate-degree spherical integrands.
 
-\paragraph{This paper.}
-We treat the choice of quadrature method as an explicit hyperparameter
-of the $S^2$ activation, exposed via a drop-in
+In this paper we treat the choice of quadrature method as an explicit
+hyperparameter of the $S^2$ activation. We expose it through a drop-in
 \texttt{CustomSO3Grid} module that replaces the default DH grid in
-any EquiformerV2 backbone (Section~\ref{sec:method}).
-We instantiate two alternatives, Gauss--Legendre and Lebedev, and
-characterise their behaviour at three levels: equivariance error of
-the bare $S^2$-Activation kernel, end-to-end forward wall-clock
-under a rigorous protocol (Section~\ref{sec:headline}), and
+any EquiformerV2 backbone~(\S\ref{sec:method}). We instantiate two
+alternatives, Gauss--Legendre and Lebedev, and characterise their
+behaviour at three levels: equivariance error of the bare
+$S^2$-Activation kernel, end-to-end forward wall-clock under a
+rigorous independent-replicate protocol~(\S\ref{sec:headline}), and
 preservation of trained-model predictions when the grid is swapped
-post-hoc (Section~\ref{sec:dropin}). We then connect the two using
-per-layer measurements of the $\ell{=}0$ invariance error, exposing
-a universal two-phase pattern (sharp jump at layer~0$\to$1, then a
-plateau) whose absolute floor is set by the training-time grid.
+post-hoc into existing checkpoints~(\S\ref{sec:dropin}). Per-layer
+measurements of the $\ell{=}0$ invariance error connect the two,
+exposing a universal two-phase pattern---a sharp jump from layer~0
+to layer~1, then a plateau---whose absolute floor is set by the
+training-time grid.
 
-\paragraph{Contributions.}
-\begin{enumerate}
-\item \textbf{Quadrature as a lever.} We identify the choice of
-  quadrature method as a separate axis of speed/accuracy improvement
-  for EquiformerV2's $S^2$ activation, complementary to the
-  architectural fix of EquiformerV3 and the sampling-pattern fix of
-  EST. We demonstrate this with two concrete instantiations
-  (Gauss--Legendre and Lebedev) and a drop-in
-  \texttt{CustomSO3Grid} module.
-\item \textbf{Headline result on the fairchem-default 12-layer
-  EquiformerV2.} GL match-DH reaches the equivariance floor at
-  $\mathbf{31.3\%}$ \textbf{lower wall-clock} than the standard DH
-  $2\times$ oversampling ($113.17 \pm 2.25$ vs.\ $164.66 \pm 1.62$~ms,
-  $p < 10^{-4}$ on $n{=}5$ independent runs). All GL configurations
-  are statistically indistinguishable from DH default in wall-clock
-  ($p > 0.4$).
-\item \textbf{Drop-in safety on trained checkpoints.} Swapping in any
-  of {GL min, GL match-DH, GL $2\times$} at inference on five
-  50-epoch DH-trained QM9 checkpoints shifts test MAE by
-  $\leq 0.01$~eV and leaves the trained-model prediction-invariance
-  ratio at $1.00 \pm 0.02$.
-\item \textbf{A two-phase per-layer mechanism explains both
-  the safety result and a complementary recommendation.}
-  The $\ell{=}0$ invariance error follows a universal $1.5$--$16\times$
-  jump at $L_0 \to L_1$ followed by a plateau, captured by a
-  $\delta$/$c$ toy model where $\delta$ is the per-S$^2$-Act
-  $\ell{>}0$ perturbation and $c$ is the cross-degree coupling
-  factor. The \emph{shape} is set by the architecture; the
-  \emph{absolute floor} is set by the training-time grid (training
-  with DH $2\times$ lowers the floor by $\sim 160\times$ vs.\ DH
-  default). This explains both why drop-in preserves predictions and
-  why training with a finer grid (e.g.\ GL match-DH) is the
-  intervention that lowers trained-model invariance error.
-\end{enumerate}
+We make four contributions. \emph{First}, we identify the choice of
+quadrature method as a separate axis of speed/accuracy improvement
+for EquiformerV2's $S^2$ activation, complementary to the
+architectural and sampling-pattern fixes proposed concurrently
+in~\cite{equiformerv3} and~\cite{est}, and demonstrate it with two
+concrete instantiations (Gauss--Legendre and Lebedev) deployed
+through a drop-in module. \emph{Second}, on the fairchem-default
+12-layer EquiformerV2 we measure that GL match-DH reaches the same
+equivariance floor as the standard DH $2\times$ oversampling at
+$31.3\%$ lower wall-clock per forward
+($113.17 \pm 2.25$ vs.~$164.66 \pm 1.62$~ms, $p < 10^{-4}$ on $n{=}5$
+independent replicates), while the GL configurations themselves are
+statistically indistinguishable from the DH default in wall-clock
+($p > 0.4$). \emph{Third}, on five 50-epoch DH-trained QM9
+checkpoints, swapping the grid at inference shifts test MAE by at
+most $0.01$~eV and leaves the trained-model prediction-invariance
+ratio at $1.00 \pm 0.02$, establishing the swap as a deployment-ready
+drop-in for inference cost. \emph{Fourth}, a per-layer analysis
+exposes a universal $1.5$--$16\times$ jump at layer~0$\to$1 followed
+by a plateau, captured by a $\delta$/$c$ toy model in which $\delta$
+is the per-$S^2$-Act $\ell{>}0$ perturbation and $c$ is the
+cross-degree coupling factor; the shape is set by the architecture
+and the absolute floor by the training-time grid (training with
+DH~$2\times$ lowers the floor by $\sim 160\times$). This decomposition
+explains both why an inference-time swap preserves predictions (the
+profile is invariant under it) and why extracting a trained-model
+equivariance gain requires using the better grid \emph{at training
+time}.
 
 %========================================================================
 \section{Background}
 \label{sec:bg}
 %========================================================================
 
-\paragraph{The $S^2$ activation operator.}
-For an SO(3)-equivariant network on $S^2$ with band limit
-$\ell_{\max}$, a per-node feature is a vector
-$c \in \mathbb{R}^{(\ell_{\max}+1)^2}$ of SH coefficients
-(possibly cropped to $|m| \leq m_{\max}$ in
-EquiformerV2~\cite{equiformerv2,escn}). Given a quadrature
-$\{(\theta_i, \phi_i, w_i)\}_{i=1}^N$ on $S^2$, the $S^2$ activation
-$\mathcal{A}_\sigma$ for a scalar function $\sigma$ is
-\[
-  \mathcal{A}_\sigma(c)_{\ell m} \;=\;
-    \sum_{i=1}^N w_i\, \sigma\!\left(\sum_{\ell',m'} c_{\ell' m'}
-        Y_{\ell' m'}(\theta_i, \phi_i)\right) Y_{\ell m}(\theta_i, \phi_i).
-\]
-The two einsums in EquiformerV2's \texttt{S2Activation.forward} are
-exactly the ``forward'' (project SH $\to$ grid) and ``backward''
-(project grid $\to$ SH) halves of this expression, both implemented
-as dense matrix multiplications against precomputed
-\texttt{to\_grid\_mat} and \texttt{from\_grid\_mat} buffers. Because
-the buffers are precomputed, swapping the grid only requires
-swapping these two buffers; no architectural change is needed.
+A per-node feature in an SO(3)-equivariant network on $S^2$ is a
+vector $c \in \mathbb{R}^{(\ell_{\max}+1)^2}$ of spherical-harmonic
+coefficients indexed by $(\ell, m)$ with $0 \leq \ell \leq \ell_{\max}$
+and $-\ell \leq m \leq \ell$. EquiformerV2 additionally crops to
+$|m| \leq m_{\max} \leq \ell_{\max}$, an SO(3)-to-SO(2) reduction
+introduced by eSCN~\cite{escn}. Given any quadrature
+$\{(\theta_i, \phi_i, w_i)\}_{i=1}^N$ on the sphere with
+$\sum_i w_i = 4\pi$ and a scalar function
+$\sigma : \mathbb{R} \to \mathbb{R}$, the $S^2$ activation
+$\mathcal{A}_\sigma$ is
+\begin{equation}
+  \mathcal{A}_\sigma(c)_{\ell m}
+  \;=\;
+  \sum_{i=1}^{N} w_i \,
+  \sigma\!\left(\,\sum_{\ell',m'} c_{\ell' m'}\,
+        Y_{\ell' m'}(\theta_i, \phi_i)\right)
+  Y_{\ell m}(\theta_i, \phi_i),
+  \label{eq:s2act}
+\end{equation}
+where $Y_{\ell m}$ are the real spherical harmonics. Equation
+\eqref{eq:s2act} factorises naturally as two linear maps separated by
+a pointwise nonlinearity: a forward projection $c \mapsto f$ that
+evaluates $f(\theta_i, \phi_i) = \sum_{\ell', m'} c_{\ell' m'}
+Y_{\ell' m'}(\theta_i, \phi_i)$ at every grid point, the application
+of $\sigma$ to each $f(\theta_i, \phi_i)$, and a backward
+projection that integrates against $w_i Y_{\ell m}(\theta_i, \phi_i)$.
+EquiformerV2's \texttt{S2Activation.forward} implements exactly this
+factorisation, with the two linear maps stored as dense buffers
+$\texttt{to\_grid\_mat}_{i, (\ell m)} = Y_{\ell m}(\theta_i, \phi_i)$
+and
+$\texttt{from\_grid\_mat}_{i, (\ell m)} = w_i \,
+Y_{\ell m}(\theta_i, \phi_i)$. Because the buffers are precomputed
+once at model construction, replacing the grid amounts to replacing
+these two buffers; no other code in the network changes.
 
-\paragraph{Two equivariance metrics.}
-We use both:
-(i)~\emph{Kernel-level} equivariance error,
-$\|\mathcal{A}_\sigma(D \cdot c) - D \cdot \mathcal{A}_\sigma(c)\|/
-   \|\mathcal{A}_\sigma(D \cdot c)\|$, on a single $\mathcal{A}_\sigma$
-   forward with random SH coefficients and a random Wigner-D rotation
-   $D$. This depends only on the grid and activation, not on weights.
-(ii)~\emph{Trained-model prediction invariance},
-$|y(x) - y(R \cdot x)|/|y(x)|$, where $y$ is the network's full forward
-   on input $x$ and $R$ is a random rotation of atom positions. This
-   depends on weights, architecture, and \emph{every} grid in the
-   network.
-The two metrics agree qualitatively but differ by orders of magnitude
-in absolute scale (kernel $\sim 10^{-1}$ vs.\ trained model
-$\sim 10^{-5}$); we are explicit throughout about which one we report.
+We will distinguish two equivariance metrics throughout. The first is
+\emph{kernel-level} equivariance error,
+\begin{equation}
+  E_{\rm kernel}(\mathcal{A}_\sigma, D)
+  \;=\;
+  \frac{\|\mathcal{A}_\sigma(D c) - D\, \mathcal{A}_\sigma(c)\|}
+       {\|\mathcal{A}_\sigma(D c)\|},
+  \label{eq:kerneleq}
+\end{equation}
+measured on a single $\mathcal{A}_\sigma$ forward with random SH
+coefficients $c$ and a random Wigner-$D$ rotation $D$ (we average over
+50 random $(c, D)$ pairs in all reported numbers). This metric depends
+only on the grid and the activation; it does not require a trained
+model. The second is \emph{trained-model prediction invariance},
+$E_{\rm pred}(R) = |y(x) - y(R \cdot x)|/|y(x)|$, where $y$ denotes
+the full network forward on a molecular input $x$ and $R$ is a
+random rotation of atom positions. This metric depends on the trained
+weights, the architecture, and \emph{every} $S^2$ activation in the
+network. The two metrics agree qualitatively but differ by orders of
+magnitude in absolute scale (kernel $\sim 10^{-1}$ vs.\ trained model
+$\sim 10^{-5}$ in our setting); we always state explicitly which one
+each number reports.
 
-\paragraph{Spherical quadratures: a 5-line summary.}
-Fix the band limit $\ell_{\max}$ and ask: how many grid points are
-needed to integrate products of two band-limited spherical harmonics
-exactly?
-\emph{Driscoll--Healy} (equiangular): $2(\ell_{\max}+1)$ latitude
-nodes (uniform in $\theta$) $\times$ $\geq 2\ell_{\max}+1$ longitude
-nodes (uniform in $\phi$); admits an FFT-based fast SH transform.
-\emph{Gauss--Legendre}: only $(\ell_{\max}+1)$ latitude nodes (roots
-of $P_{\ell_{\max}+1}(\cos\theta)$) $\times$ $\geq 2\ell_{\max}+1$
-longitude nodes; no fast algorithm, only dense matmul.
-\emph{Lebedev}: a single set of $N$ points on the sphere
-non-tensor-product, designed to be exact for all spherical
-polynomials up to a given degree with as few points as possible
-(e.g.\ degree~21 in 170 points, the smallest rule that integrates
-products at $\ell_{\max}{=}6$ exactly; cf.\ tensor-product DH at 784
-points).
+The choice of quadrature in \eqref{eq:s2act} reduces to choosing
+$\{(\theta_i, \phi_i, w_i)\}_{i=1}^N$. We consider three options
+(Figure~\ref{fig:quadratures}). \emph{Driscoll--Healy} uses an
+equiangular tensor-product grid $\theta_j = (j+\tfrac{1}{2})\pi/N_\theta$,
+$\phi_k = 2\pi k/N_\phi$, with $N_\theta = 2(\ell_{\max}+1)$ latitude
+points and $N_\phi \geq 2\ell_{\max}+1$ longitude points; the $\phi$
+direction admits an FFT and the $\theta$ direction admits a fast
+``cosine transform,'' giving an $O(\ell_{\max}^2 \log^2 \ell_{\max})$
+fast SH transform~\cite{driscoll_healy}. \emph{Gauss--Legendre} uses
+$\theta_j$ at the roots of the Legendre polynomial
+$P_{N_\theta}(\cos\theta_j) = 0$ with companion weights, requiring
+only $N_\theta = \ell_{\max}+1$ latitude points (a factor of two
+fewer than DH); $\phi$ is again uniform but no fast algorithm exists
+for the Legendre direction~\cite{shtools}. \emph{Lebedev} rules give a
+non-tensor-product set of $N$ nodes on the sphere designed to be exact
+for all spherical polynomials up to a given degree with as few points
+as possible: degree~21 with 170 points is the smallest rule exact at
+$\ell_{\max}{=}6$~\cite{lebedev_quadrature}, far below DH's
+$2(\ell_{\max}+1)\times(2\ell_{\max}+1) = 14 \times 13 = 182$ points
+or DH~$2\times$'s $28 \times 28 = 784$ points.
 
-\paragraph{Why DH became the default---and why that's no longer
-relevant.}
-e3nn's choice of DH is not arbitrary: at sufficiently large
-$\ell_{\max}$ ($\gtrsim 64$ in practice), the FFT-based fast
-SH transform gives an $O(\ell_{\max}^2 \log^2 \ell_{\max})$ cost vs.\
-the dense $O(\ell_{\max}^4)$, an algorithmically decisive advantage.
-But EquiformerV2 operates at $\ell_{\max} \in \{4, 6, 8\}$, where
-the FFT setup overhead dominates its asymptotic savings on a GPU; and
-EquiformerV2's \texttt{SO3\_Grid} precomputes the SH
-projection as a single dense matrix, never invoking the FFT path
-even when it is available in e3nn (Appendix~\ref{app:fft}).
-Once we accept the dense-matmul regime EquiformerV2 already inhabits,
-DH's design advantage is unrealised: the choice between DH, GL, and
-Lebedev becomes purely a question of which set of nodes integrates
-band-limited products most efficiently---a textbook quadrature problem
-in which Gauss--Legendre and Lebedev both win over DH.
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{fig_quadratures.pdf}
+  \caption{Three quadrature node layouts on $S^2$ for
+    $\ell_{\max}=4$. Driscoll--Healy uses an equiangular
+    tensor-product grid with $2(\ell_{\max}+1)$ latitude rings, twice
+    what Gauss--Legendre needs for the same exactness. Lebedev avoids
+    the tensor-product structure entirely, distributing roughly the
+    same number of points more uniformly. All three are exact for
+    spherical polynomials of degree $\leq 2\ell_{\max}$.}
+  \label{fig:quadratures}
+\end{figure}
+
+The reason Driscoll--Healy became e3nn's default is its FFT-based fast
+SH transform: at $\ell_{\max} \gtrsim 64$ this gives a decisive
+$O(\ell_{\max}^2 \log^2 \ell_{\max})$ vs.\ the dense $O(\ell_{\max}^4)$.
+EquiformerV2 operates at $\ell_{\max} \in \{4, 6, 8\}$ where this
+asymptotic advantage has not yet emerged on a GPU; and as already
+noted, its \texttt{SO3\_Grid} precomputes the SH projection as a
+single dense matrix and never invokes the FFT path that e3nn does
+provide for some configurations (Appendix~\ref{app:fft} quantifies
+this, showing that even when the FFT path is wired up explicitly it
+is $7 \times$ slower than the dense path at our problem size). Once
+we are in the dense-matmul regime, DH's design advantage is
+unrealised, and the question becomes purely numerical: which nodes
+integrate band-limited products with the fewest points. The answer
+points to GL and Lebedev.
 
 %========================================================================
 \section{Method: \texttt{CustomSO3Grid}}
@@ -246,31 +269,87 @@ in which Gauss--Legendre and Lebedev both win over DH.
 %========================================================================
 
 We implement \texttt{CustomSO3Grid}, a drop-in replacement for
-fairchem's \texttt{SO3\_Grid} that supports DH, Gauss--Legendre, and
-Lebedev quadratures. The class exposes the same
-\texttt{get\_to\_grid\_mat} / \texttt{get\_from\_grid\_mat} interface
-as fairchem's original, and the resulting matrices have the same
-shape signature (\texttt{[$N_\beta$, $N_\alpha$, $n_{\mathrm{coeffs}}$]})
-expected by \texttt{S2Activation.forward}. A
-\texttt{patch\_so3\_grid()} helper replaces every grid in
-\texttt{model.backbone.SO3\_grid} \emph{after} model construction, so
+fairchem's \texttt{SO3\_Grid} that supports the three quadrature
+families introduced above (DH, Gauss--Legendre, Lebedev). It exposes
+the same \texttt{get\_to\_grid\_mat} / \texttt{get\_from\_grid\_mat}
+interface as fairchem's original, with matrices of identical shape
+signature; a \texttt{patch\_so3\_grid()} helper replaces every grid
+in \texttt{model.backbone.SO3\_grid} after model construction, so
 existing pretrained weights remain valid.
 
-For tensor-product quadratures (DH and GL), the
-\texttt{[$N_\beta$, $N_\alpha$, $\cdot$]} layout is natural: the grid
-is $N_\beta$ latitude $\times$ $N_\alpha$ longitude points. For
-Lebedev (a non-tensor-product flat list of $N$ points with
-non-separable weights), we reshape as $N_\beta = 1$, $N_\alpha = N$ to
-fit the einsum signature; this allows Lebedev to slot in without
-modifying any other code in EquiformerV2's forward, at the cost of
-slightly less efficient memory access compared to a flattened
-single-axis kernel.
+\subsection{Constructing the to/from-grid matrices}
 
-The grid matrices are constructed by direct evaluation of e3nn's
-real spherical harmonics on the chosen quadrature nodes, with the
-relevant integral-norm convention and the same
-$m_{\max}$-cropping/rescaling logic as fairchem's
-\texttt{SO3\_Grid} (lines 537--575 of \texttt{so3.py}).
+For the tensor-product cases (DH and GL) the grid factorises as
+$\{(\theta_j, \phi_k, w_j^{(\theta)} w_k^{(\phi)})\}$ with $1 \leq j
+\leq N_\theta$ latitude points and $1 \leq k \leq N_\phi$ longitude
+points. The longitude weights are uniform,
+$w_k^{(\phi)} = 2\pi/N_\phi$. The latitude nodes and weights differ:
+\begin{itemize}\setlength\itemsep{0pt}
+\item \emph{Driscoll--Healy:}
+  $\theta_j^{\rm DH} = (j-\tfrac{1}{2})\pi/N_\theta$ (uniform in $\theta$),
+  with weights given by the Kostelec--Rockmore expression
+  $w_j^{\rm DH} = (2/N_\theta) \sin\theta_j \sum_{r=0}^{N_\theta/2-1}
+   \tfrac{1}{2r+1} \sin\bigl((2r+1)\theta_j\bigr)$~\cite{kostelec_rockmore},
+  and $N_\theta = 2(\ell_{\max}+1)$.
+\item \emph{Gauss--Legendre:} $\theta_j^{\rm GL}$ are the roots of the
+  Legendre polynomial $P_{N_\theta}(\cos\theta_j^{\rm GL}) = 0$
+  on $(0, \pi)$, with companion weights
+  $w_j^{\rm GL} = 2/\bigl[(1-\cos^2\theta_j)\,(P_{N_\theta}'(\cos\theta_j))^2\bigr]$,
+  and $N_\theta = \ell_{\max}+1$ suffices for exactness on
+  band-limited products of degree $2\ell_{\max}$.
+\end{itemize}
+Both yield a flat list of $N = N_\theta N_\phi$ nodes
+$(\theta_i, \phi_i)$ with weights $w_i = w_j^{(\theta)} w_k^{(\phi)}$.
+We assemble the buffers as
+$\texttt{to\_grid\_mat}_{i, (\ell m)} = Y_{\ell m}(\theta_i, \phi_i)$
+and
+$\texttt{from\_grid\_mat}_{i, (\ell m)} = w_i \, Y_{\ell m}(\theta_i, \phi_i)$,
+using e3nn's real spherical harmonics
+\texttt{o3.spherical\_harmonics(...,
+normalization=\textquotesingle integral\textquotesingle)} and applying the same
+$m_{\max}$-cropping and rescaling as fairchem's \texttt{SO3\_Grid}
+(\texttt{so3.py:537--575}). Reshaping into the
+$[N_\theta, N_\phi, n_{\rm coeffs}]$ layout that
+\texttt{S2Activation.forward} expects is a no-op for the
+tensor-product cases.
+
+For Lebedev rules the grid does not factorise. The nodes
+$\{(\hat r_i, w_i)\}_{i=1}^N$ are pulled from
+\texttt{scipy.integrate.lebedev\_rule(degree)}, which returns the
+$N$ Cartesian points $\hat r_i \in S^2$ and weights $w_i$ for one of
+33 standard rules (degrees $3, 5, 7, \ldots, 131$ with point counts
+$6, 14, 26, \ldots, 5810$). To fit EquiformerV2's
+$[N_\theta, N_\phi, n_{\rm coeffs}]$ einsum signature without
+touching the rest of the network, we reshape the flat $N$-point grid
+as $N_\theta = 1$, $N_\phi = N$. The resulting buffer is a
+single-axis grid that \texttt{einsum} happily contracts but with less
+efficient memory access than a flattened-axis kernel would give; we
+discuss this limitation in \S\ref{sec:limitations}.
+
+\subsection{Choosing $N_\theta$, $N_\phi$, and Lebedev degree}
+
+The minimum quadrature density at which $S^2$ activation products are
+integrated exactly is set by the band limit $\ell_{\max}$. For
+products of two functions band-limited to degree $\ell_{\max}$ the
+integrand has degree $\leq 2\ell_{\max}$, so:
+\begin{itemize}\setlength\itemsep{0pt}
+\item DH minimum: $N_\theta = 2(\ell_{\max}+1)$, $N_\phi = 2\ell_{\max}+1$;
+\item GL minimum: $N_\theta = \ell_{\max}+1$, $N_\phi = 2\ell_{\max}+1$;
+\item Lebedev minimum: smallest available rule of degree
+  $\geq 2\ell_{\max}$ (e.g.\ degree 13 = 74 points for
+  $\ell_{\max}=6$; degree 21 = 170 points provides comfortable
+  headroom).
+\end{itemize}
+For the EquiformerV2 evaluation in this paper we standardise on
+$\ell_{\max} = 6$, $m_{\max} = 2$, where DH default is $14 \times 5
+= 70$ points (e3nn's choice) and DH $2\times$ is $28 \times 28 = 784$
+points (fairchem's commonly used oversampling override). We compare
+these against GL min ($7 \times 13 = 91$ pts), GL match-DH
+($14 \times 13 = 182$ pts), GL $2\times$ ($14 \times 28 = 392$ pts),
+Lebedev d=13 (74 pts), and Lebedev d=21 (170 pts). All six configurations
+are produced by a single call to \texttt{patch\_so3\_grid(model,
+method=\ldots, n\_beta=\ldots, n\_alpha=\ldots, lebedev\_degree=\ldots)};
+no other code in the model changes.
 
 %========================================================================
 \section{Headline: Matched-Equivariance Pareto}
