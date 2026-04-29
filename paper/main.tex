@@ -184,13 +184,30 @@ Y_{\ell' m'}(\theta_i, \phi_i)$ at every grid point, the application
 of $\sigma$ to each $f(\theta_i, \phi_i)$, and a backward
 projection that integrates against $w_i Y_{\ell m}(\theta_i, \phi_i)$.
 EquiformerV2's \texttt{S2Activation.forward} implements exactly this
-factorisation, with the two linear maps stored as dense buffers
+factorisation (Figure~\ref{fig:workflow}), with the two linear maps
+stored as dense buffers
 $\texttt{to\_grid\_mat}_{i, (\ell m)} = Y_{\ell m}(\theta_i, \phi_i)$
 and
 $\texttt{from\_grid\_mat}_{i, (\ell m)} = w_i \,
 Y_{\ell m}(\theta_i, \phi_i)$. Because the buffers are precomputed
 once at model construction, replacing the grid amounts to replacing
 these two buffers; no other code in the network changes.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{fig_workflow.pdf}
+  \caption{The $S^2$ activation pipeline. SH coefficients $c$ are
+    projected to grid values $f(\theta_i, \phi_i)$ (the
+    \emph{to-grid} step), the scalar activation $\sigma$ is applied
+    pointwise on $S^2$, and the result is integrated against
+    $w_i\,Y_{\ell m}$ to produce new SH coefficients $c'$ (the
+    \emph{from-grid} step). Only the from-grid step weights the
+    values, and only it contributes quadrature error. Both
+    projections use the same set of quadrature nodes
+    $\{(\theta_i, \phi_i)\}$, illustrated for three families in
+    Figure~\ref{fig:quadratures}.}
+  \label{fig:workflow}
+\end{figure}
 
 We will distinguish two equivariance metrics throughout. The first is
 the \emph{kernel-level} equivariance error of a single $S^2$
@@ -266,36 +283,19 @@ DH~$2\times$'s $28 \times 28 = 784$ points.
 
 \begin{figure}[t]
   \centering
-  \begin{subfigure}{\linewidth}
-    \centering
-    \includegraphics[width=\linewidth]{fig_workflow.pdf}
-    \caption{The $S^2$ activation pipeline. SH coefficients $c$ are
-      projected to grid values $f(\theta_i, \phi_i)$, the scalar
-      activation $\sigma$ is applied pointwise, and the result is
-      integrated against $w_i Y_{\ell m}$ to produce new SH
-      coefficients $c'$. Both projections use the same set of
-      quadrature nodes and weights; only the latter weights the
-      values, and only the latter contributes the quadrature error.}
-    \label{fig:workflow}
-  \end{subfigure}\\[0.6em]
-  \begin{subfigure}{\linewidth}
-    \centering
-    \includegraphics[width=0.95\linewidth]{fig_quadratures.pdf}
-    \caption{Three quadrature node layouts on $S^2$ for
-      $\ell_{\max}=4$. Driscoll--Healy uses an equiangular
-      tensor-product grid with $2(\ell_{\max}+1)$ latitude rings,
-      twice what Gauss--Legendre needs for the same exactness.
-      Lebedev avoids the tensor-product structure entirely,
-      distributing roughly the same number of points more
-      uniformly. All three are exact for spherical polynomials of
-      degree $\leq 2\ell_{\max}$.}
-    \label{fig:quadratures}
-  \end{subfigure}
-  \caption{The $S^2$ activation operator (a) and the three
-    quadrature families we instantiate (b). Replacing one quadrature
-    by another changes only the buffers \texttt{to\_grid\_mat} and
-    \texttt{from\_grid\_mat}; the rest of the pipeline is invariant.}
-  \label{fig:quadratures-and-workflow}
+  \includegraphics[width=\linewidth]{fig_quadratures.pdf}
+  \caption{Three quadrature node layouts on $S^2$ for
+    $\ell_{\max}=4$. Driscoll--Healy (left) uses an equiangular
+    tensor-product grid with $2(\ell_{\max}+1)$ latitude rings, twice
+    what Gauss--Legendre (middle) needs for the same exactness.
+    Lebedev (right) avoids the tensor-product structure entirely,
+    distributing roughly the same number of points more uniformly
+    over the sphere. All three integrate spherical polynomials of
+    degree $\leq 2\ell_{\max}$ exactly. Replacing one for another
+    changes only the buffers \texttt{to\_grid\_mat} and
+    \texttt{from\_grid\_mat}; the rest of the
+    Figure~\ref{fig:workflow} pipeline is invariant.}
+  \label{fig:quadratures}
 \end{figure}
 
 We expose all three through a drop-in module \texttt{CustomSO3Grid}
