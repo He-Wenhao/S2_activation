@@ -194,21 +194,24 @@ these two buffers; no other code in the network changes.
 We will distinguish two equivariance metrics throughout. The first is
 the \emph{kernel-level} equivariance error of a single $S^2$
 activation, which we define as the expected relative residual under
-random rotations and random SH coefficients:
+random rotations and random SH coefficients. Let $\widetilde{D}(R)$
+denote the Wigner-$D$ matrix associated with a rotation
+$R \in \mathrm{SO}(3)$ (acting on the SH-coefficient vector by
+$c \mapsto \widetilde{D}(R) c$):
 \begin{equation}
   e_{\rm kernel}(\mathcal{A}_\sigma)
   \;=\;
   \mathop{\mathbb{E}}_{\substack{c \sim \mathcal{N}(0, I) \\
-                                 D \sim \mathrm{Haar}(\mathrm{SO}(3))}}
+                                 R \sim \mathrm{Haar}(\mathrm{SO}(3))}}
   \!\left[\,
-  \frac{\bigl\| \mathcal{A}_\sigma(Dc)
-              \;-\; D\, \mathcal{A}_\sigma(c) \bigr\|}
-       {\bigl\| \mathcal{A}_\sigma(Dc) \bigr\|}
+  \frac{\bigl\| \mathcal{A}_\sigma\!\bigl(\widetilde{D}(R)\,c\bigr)
+              \;-\; \widetilde{D}(R)\, \mathcal{A}_\sigma(c) \bigr\|}
+       {\bigl\| \mathcal{A}_\sigma\!\bigl(\widetilde{D}(R)\,c\bigr) \bigr\|}
   \,\right].
   \label{eq:kerneleq}
 \end{equation}
 In practice we estimate \eqref{eq:kerneleq} as a Monte Carlo average
-over 50 independent $(c, D)$ pairs (5 rotations $\times$ 10 random
+over 50 independent $(c, R)$ pairs (5 rotations $\times$ 10 random
 inputs in the experiments below). This metric depends only on the
 grid and the activation $\sigma$; it does not require a trained
 model. The second is the \emph{trained-model prediction invariance}
