@@ -288,11 +288,104 @@ weight-independent properties of the kernel.
     it can be applied to existing pretrained checkpoints today.
 \end{enumerate}
 
-% --- everything below here is to be expanded; the remaining sections
-% from paper_bk/ (truncation--aliasing, jacobian isotropy, downstream
-% task, smoothness--expressiveness tradeoff, per-layer error
-% accumulation) will be folded in as supporting analysis once we settle
-% on which to include in the main vs.\ appendix. ---
+%========================================================================
+\section{Why Doesn't FFT Save the Day for DH?}
+\label{sec:fft}
+%========================================================================
+
+A natural objection to our claim that DH is the wrong default: the
+classical Driscoll--Healy theorem~\cite{driscoll_healy} is exactly the
+statement that an equiangular grid of $2(\ell_{\max}+1) \times
+2(\ell_{\max}+1)$ points admits a fast SH transform of cost
+$O(N^2 \log^2 N)$, against $O(N^4)$ for a naive dense projection.
+GL nodes have no such fast algorithm, so isn't DH algorithmically
+strictly better at the limit?
+
+This section shows that, in EquiformerV2 specifically, this advantage is
+not realised. Three observations:
+
+\paragraph{(i) e3nn implements only the longitude FFT.}
+e3nn's \texttt{ToS2Grid.forward} (file \texttt{e3nn/o3/\_s2grid.py:367})
+does
+\begin{quote}
+\begin{small}
+\texttt{x = einsum('mbi,zi$\to$zbm', shb, x)}\\
+\texttt{if sa $>=$ sm and sa $\%$ 2 $==$ 1: x = irfft(x, sa)}\\
+\texttt{else: x = einsum('am,zbm$\to$zba', sha, x)}
+\end{small}
+\end{quote}
+The Legendre direction is always a dense matmul against \texttt{shb}.
+The FFT is along longitude only, and only when $N_\alpha$ is odd and at
+least $2\ell_{\max}+1$. e3nn does not implement the full
+Driscoll--Healy fast Legendre algorithm.
+
+\paragraph{(ii) EquiformerV2 bypasses the FFT entirely.}
+The \texttt{SO3\_Grid} class in \texttt{fairchem.core.models.equiformer\_v2.so3}
+(lines 529--578) calls \texttt{ToS2Grid} only at construction time,
+collapses \texttt{shb} and \texttt{sha} into a single dense
+\texttt{to\_grid\_mat} of shape $[N_\beta, N_\alpha, n_{\mathrm{coeffs}}]$,
+and applies it at runtime via a single \texttt{einsum}. The FFT branch
+in \texttt{ToS2Grid.forward} is never reached because
+\texttt{ToS2Grid.forward} is never called at runtime---only its internal
+buffers are.
+
+\paragraph{(iii) Wiring up the FFT path makes the kernel \emph{slower},
+not faster, at production scales.}
+We re-implemented \texttt{S2Activation} so that it explicitly invokes
+\texttt{ToS2Grid.forward} / \texttt{FromS2Grid.forward} at runtime
+(triggering the FFT branch when $N_\alpha$ is odd and $\geq 2\ell_{\max}+1$),
+and benchmarked the resulting kernel against the dense path at the
+\emph{same} grid size. Table~\ref{tab:four_way} reports SiLU
+S$^2$-activation timing at $\ell_{\max}{=}6$, $m_{\max}{=}2$ with
+batch~1024 token messages and 128 channels. At a $14 \times 13 = 182$-pt
+grid (where the FFT branch triggers), the FFT path is
+\emph{$7\times$ slower} than dense matmul. The mmax-cropping
+inflate/scatter step plus a much larger \texttt{shb} einsum (over the
+full $(\ell_{\max}+1)^2 = 49$ basis instead of the
+\textbf{cropped} 29 used by the dense path) wipes out the savings of
+the alpha FFT at $N_\alpha = 13$.
+
+\begin{table}[t]
+  \centering
+  \caption{Kernel-level S$^2$-Activation benchmark: equivariance error
+  and per-call time for four quadrature methods at $\ell_{\max}{=}6$,
+  $m_{\max}{=}2$, SiLU activation, batch~1024 with 128 channels, NVIDIA
+  A100-SXM4-40GB. Equivariance error is averaged over 5 random rotations
+  $\times$ 10 random inputs; kernel time is mean $\pm$ 95\% CI over 3
+  runs $\times$ 20 forwards each.}
+  \label{tab:four_way}
+  \small
+  \begin{tabular}{lccr}
+    \toprule
+    Method & Pts & Equiv err & Kernel (ms) \\
+    \midrule
+    DH-dense default ($N_\alpha = 5$)   & 70  & $4.24 \times 10^{-1}$ & $0.34 \pm 0.00$ \\
+    DH-dense match ($N_\alpha = 13$)    & 182 & $3.35 \times 10^{-1}$ & $0.62 \pm 0.01$ \\
+    \textbf{DH-FFT} ($N_\alpha = 13$)   & 182 & $3.35 \times 10^{-1}$ & $\mathbf{4.32 \pm 0.05}$ \\
+    GL match-DH ($N_\alpha = 13$)       & 182 & $3.34 \times 10^{-1}$ & $0.58 \pm 0.00$ \\
+    Lebedev ($d = 13$)                  & 74  & $5.11 \times 10^{-1}$ & $0.25 \pm 0.00$ \\
+    \textbf{Lebedev} ($d = 21$)         & 170 & $\mathbf{3.35 \times 10^{-1}}$ & $\mathbf{0.41 \pm 0.00}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Summary.}
+The DH grid was designed for a fast algorithm that EquiformerV2 does not
+use, and that loses to dense matmul anyway when wired in at the model's
+operating scale ($N_\alpha \in \{5, 13\}$, channel axis $\sim$128
+dominating compute). Once we restrict to the dense regime---which
+EquiformerV2 already inhabits---the question of which quadrature to use
+collapses to ``which set of nodes integrates band-limited products with
+the fewest points,'' and Gauss--Legendre and high-order Lebedev both win
+over Driscoll--Healy. Lebedev $d = 21$ (170 points) is in fact the
+kernel-level Pareto winner at the saturation floor, beating GL match-DH
+by an additional 28\%; it does not, however, fit cleanly into
+EquiformerV2's tensor-product
+\texttt{einsum("bai, zic\,$\to$\,zbac", to\_grid\_mat, inputs)}
+schema without minor refactoring (we set $N_\beta = 1$ as a workaround).
+The full-network Pareto in Figure~\ref{fig:pareto} therefore reports
+GL as the ``safe drop-in,'' but Lebedev is a strict further improvement
+for anyone willing to flatten the grid axis.
 
 \bibliographystyle{abbrvnat}
 \bibliography{references}
