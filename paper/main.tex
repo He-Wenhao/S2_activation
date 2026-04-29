@@ -192,27 +192,47 @@ once at model construction, replacing the grid amounts to replacing
 these two buffers; no other code in the network changes.
 
 We will distinguish two equivariance metrics throughout. The first is
-\emph{kernel-level} equivariance error,
+the \emph{kernel-level} equivariance error of a single $S^2$
+activation, which we define as the expected relative residual under
+random rotations and random SH coefficients:
 \begin{equation}
-  E_{\rm kernel}(\mathcal{A}_\sigma, D)
+  e_{\rm kernel}(\mathcal{A}_\sigma)
   \;=\;
-  \frac{\|\mathcal{A}_\sigma(D c) - D\, \mathcal{A}_\sigma(c)\|}
-       {\|\mathcal{A}_\sigma(D c)\|},
+  \mathop{\mathbb{E}}_{\substack{c \sim \mathcal{N}(0, I) \\
+                                 D \sim \mathrm{Haar}(\mathrm{SO}(3))}}
+  \!\left[\,
+  \frac{\bigl\| \mathcal{A}_\sigma(Dc)
+              \;-\; D\, \mathcal{A}_\sigma(c) \bigr\|}
+       {\bigl\| \mathcal{A}_\sigma(Dc) \bigr\|}
+  \,\right].
   \label{eq:kerneleq}
 \end{equation}
-measured on a single $\mathcal{A}_\sigma$ forward with random SH
-coefficients $c$ and a random Wigner-$D$ rotation $D$ (we average over
-50 random $(c, D)$ pairs in all reported numbers). This metric depends
-only on the grid and the activation; it does not require a trained
-model. The second is \emph{trained-model prediction invariance},
-$E_{\rm pred}(R) = |y(x) - y(R \cdot x)|/|y(x)|$, where $y$ denotes
-the full network forward on a molecular input $x$ and $R$ is a
-random rotation of atom positions. This metric depends on the trained
-weights, the architecture, and \emph{every} $S^2$ activation in the
-network. The two metrics agree qualitatively but differ by orders of
-magnitude in absolute scale (kernel $\sim 10^{-1}$ vs.\ trained model
-$\sim 10^{-5}$ in our setting); we always state explicitly which one
-each number reports.
+In practice we estimate \eqref{eq:kerneleq} as a Monte Carlo average
+over 50 independent $(c, D)$ pairs (5 rotations $\times$ 10 random
+inputs in the experiments below). This metric depends only on the
+grid and the activation $\sigma$; it does not require a trained
+model. The second is the \emph{trained-model prediction invariance}
+of the full network's output $y$ on a molecular input $x$:
+\begin{equation}
+  e_{\rm pred}
+  \;=\;
+  \mathop{\mathbb{E}}_{\substack{x \sim \mathcal{D}_{\rm test} \\
+                                 R \sim \mathrm{Haar}(\mathrm{SO}(3))}}
+  \!\left[\,
+  \frac{\bigl| y(x) - y(R \cdot x) \bigr|}
+       {\bigl| y(x) \bigr|}
+  \,\right],
+  \label{eq:predeq}
+\end{equation}
+where $\mathcal{D}_{\rm test}$ is the held-out test set and
+$R \cdot x$ denotes the rotation of atom positions by $R$. This
+metric depends on the trained weights, the architecture, and
+\emph{every} $S^2$ activation in the network; we estimate it as an
+average over 10 rotations $\times$ 20 test batches. The two metrics
+agree qualitatively but differ by orders of magnitude in absolute
+scale ($e_{\rm kernel} \sim 10^{-1}$ vs.\ $e_{\rm pred} \sim 10^{-5}$
+in our setting); we always state explicitly which one each number
+reports.
 
 The choice of quadrature in \eqref{eq:s2act} reduces to choosing
 $\{(\theta_i, \phi_i, w_i)\}_{i=1}^N$. We consider three options
