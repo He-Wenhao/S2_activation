@@ -281,6 +281,17 @@ weight-independent properties of the kernel.
     post-hoc inherits the wall-clock benefit without harming accuracy,
     but realising kernel-level equivariance gains in the trained model
     also requires training with GL.
+  \item We document a \emph{two-phase} per-layer equivariance error
+    pattern in EquiformerV2 (a $1.5$--$16\times$ jump from layer~0 to
+    layer~1, then a plateau across deeper layers; \S\ref{sec:perlayer})
+    and use it to explain two findings of this paper: (i)~why
+    inference-time drop-in preserves predictions---the per-layer floor
+    is set at training time, so swapping the grid does not move it; and
+    (ii)~why fully harvesting GL's kernel-level equivariance advantage
+    in the trained model requires \emph{training} with GL---a finer
+    training-time grid lowers the absolute $L_0$ floor by
+    $\sim$160$\times$ and propagates that floor through all subsequent
+    layers.
   \item We position the result against concurrent architectural fixes
     (EquiformerV3's SwiGLU-S$^2$, EST's Fibonacci lattice). GL operates
     on a different lever (the quadrature rule, not the activation or the
@@ -359,6 +370,144 @@ depends on tensor shapes, not weight values), the OC20-31M timing in
 Figure~\ref{fig:sweep} faithfully measures what a deployed inference
 forward would cost; we leave the fully-loaded checkpoint inference as
 future work.
+
+%========================================================================
+\section{Per-Layer Error Dynamics, and Why Drop-in Preserves Predictions}
+\label{sec:perlayer}
+%========================================================================
+
+We took a brief detour earlier: the matched-equivariance saving is
+kernel-level (Fig.~\ref{fig:pareto}, Table~\ref{tab:four_way}); the
+trained-model prediction-invariance error is essentially unchanged when
+GL is swapped in at inference (\S\ref{sec:dropin}). This section uses
+\emph{per-layer} measurements to explain the gap, and to provide an
+operational guide: what the swap will and will not do for you.
+
+\paragraph{Per-layer protocol.}
+We instrument each transformer block in EquiformerV2 with a forward
+hook that captures the $\ell{=}0$ component of the block's output
+(an SO(3) invariant scalar field; in a perfectly equivariant model it
+should not change under input rotation). We rotate the input atom
+positions by a random Wigner-D matrix and report
+$\|e_i^{\ell=0} - e_i^{\ell=0,(R)}\|_F / \|e_i^{\ell=0}\|_F$ at each
+layer $i$, averaged over 10 rotations and 20 batches. The measurement
+is implemented in \texttt{measure\_equivariance} in
+\texttt{expF\_equiformerv2\_qm9.py:252}.
+
+\paragraph{The two-phase pattern.}
+Across all activations and grids (Table~\ref{tab:perlayer}), the
+$\ell{=}0$ invariance error follows the same two-phase shape: a sharp
+jump from layer~0 to layer~1 ($1.5\times$--$15.7\times$ depending on
+activation smoothness), then a plateau through layers 2--3.
+
+\begin{table}[t]
+  \centering
+  \caption{Per-layer $\ell{=}0$ invariance error in 50-epoch trained
+  EquiformerV2 (4 layers, $\ell_{\max}{=}4$, $m_{\max}{=}2$, QM9).
+  Mean over 4--5 seeds. The two-phase pattern (large $L_0 \to L_1$ jump,
+  then plateau) is universal; only the absolute magnitude and the
+  jump ratio depend on the activation/grid choice. Training with a
+  finer grid (SiLU $2\times$) lowers the absolute $L_0$ floor by
+  $\sim$160$\times$.}
+  \label{tab:perlayer}
+  \small
+  \begin{tabular}{lcccc c}
+    \toprule
+    Trained config (SiLU + …) & $L_0$ & $L_1$ & $L_2$ & $L_3$ & $L_0 \!\to\! L_1$ \\
+    \midrule
+    SiLU, DH default        & $5.2 \times 10^{-5}$ & $5.1 \times 10^{-4}$ & $5.7 \times 10^{-4}$ & $7.1 \times 10^{-4}$ & $9.8\times$ \\
+    SiLU, DH $2\times$      & $3.3 \times 10^{-7}$ & $2.8 \times 10^{-6}$ & $3.9 \times 10^{-6}$ & $4.0 \times 10^{-6}$ & $8.6\times$ \\
+    \midrule
+    \multicolumn{6}{l}{\emph{Other activations (DH default, for context):}} \\
+    Softplus($\beta{=}1$)   & $1.3 \times 10^{-5}$ & $1.2 \times 10^{-4}$ & $1.8 \times 10^{-4}$ & $2.3 \times 10^{-4}$ & $8.8\times$ \\
+    tanh                    & $7.6 \times 10^{-5}$ & $1.2 \times 10^{-3}$ & $1.1 \times 10^{-3}$ & $9.8 \times 10^{-4}$ & $15.7\times$ \\
+    ReLU                    & $7.7 \times 10^{-4}$ & $1.1 \times 10^{-3}$ & $1.1 \times 10^{-3}$ & $1.1 \times 10^{-3}$ & $1.5\times$ \\
+    $|\cdot|$               & $1.8 \times 10^{-3}$ & $3.3 \times 10^{-3}$ & $2.4 \times 10^{-3}$ & $1.6 \times 10^{-3}$ & $1.9\times$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Mechanism.}
+\emph{Phase 1 (layer 0$\to$1).} EquiformerV2's
+\texttt{SeparableS2Activation} routes $\ell{=}0$ through a scalar SiLU
+that does not see the S$^2$ grid, so layer~0 incurs no \emph{direct}
+quadrature error on $\ell{=}0$. The error there comes from \emph{indirect}
+paths: RMSNorm computes a normalisation factor over all $\ell$, so any
+quadrature error in $\ell{>}0$ leaks into the $\ell{=}0$ scaling; and the
+SO(2) convolution's $m{=}0$ branch mixes $\ell{=}0$ with $\ell{>}0$
+coefficients via a learned \texttt{nn.Linear}. Both are second-order in
+the per-step grid error.
+At layer~1, by contrast, the \emph{input} representation already carries
+$\ell{>}0$ corruption from layer~0's S$^2$ activations, and the attention
+mechanism aggregates corrupted neighbour features through learned linear
+maps to produce new $\ell{=}0$ values. This is a \emph{first-order}
+contamination path, hence the order-of-magnitude jump.
+
+\emph{Phase 2 (layers 2--3).} Three forces stabilise the error.
+(i)~Residual connections add a fresh increment at each layer; once the
+incremental error is comparable to the accumulated error, the relative
+ratio saturates. (ii)~RMSNorm rescales the embedding to unit norm at
+every layer entry, blocking unbounded growth. (iii)~The error spectrum
+itself reaches a steady state after a few S$^2$ activations.
+Notably, $|\cdot|$ \emph{decreases} at layers 2--3 because $|x|$ is even,
+so it projects all odd-$\ell$ components to zero, suppressing both the
+signal and its error in higher degrees.
+
+\paragraph{Implication 1: drop-in safety is explained by training-time
+grid locking.}
+Table~\ref{tab:dropin_perlayer} shows per-layer $\ell{=}0$ invariance
+error on the same DH-default-trained checkpoints, this time with the
+inference grid swapped to GL min, GL match-DH, or GL $2\times$. The
+profiles are identical at the percent level: every grid produces the same
+$L_0 \approx 5.3 \times 10^{-5}$, the same $L_0 \to L_1$ jump ratio of
+$\sim$$9.4\times$, the same plateau. The trained network has internalised
+its training-time grid behaviour in its weights; replacing the grid
+post-hoc cannot move the per-layer floor.
+
+\begin{table}[t]
+  \centering
+  \caption{Per-layer $\ell{=}0$ invariance error when swapping the grid
+  at inference on four DH-default-trained checkpoints (SiLU, $\ell_{\max}{=}4$,
+  $m_{\max}{=}2$, $n=4$ seeds). Numbers are statistically indistinguishable
+  across grids: the trained network has internalised its training-time
+  grid; swapping at inference inherits the wall-clock benefit without
+  changing the per-layer error profile.}
+  \label{tab:dropin_perlayer}
+  \small
+  \begin{tabular}{lcccc c}
+    \toprule
+    Inference grid & $L_0$ & $L_1$ & $L_2$ & $L_3$ & $L_0 \!\to\! L_1$ \\
+    \midrule
+    DH default (training-time) & $5.27 \times 10^{-5}$ & $4.98 \times 10^{-4}$ & $5.60 \times 10^{-4}$ & $6.96 \times 10^{-4}$ & $9.4\times$ \\
+    GL min                     & $5.33 \times 10^{-5}$ & $4.97 \times 10^{-4}$ & $5.55 \times 10^{-4}$ & $6.96 \times 10^{-4}$ & $9.3\times$ \\
+    GL match-DH                & $5.30 \times 10^{-5}$ & $5.03 \times 10^{-4}$ & $5.60 \times 10^{-4}$ & $7.00 \times 10^{-4}$ & $9.5\times$ \\
+    GL $2\times$               & $5.31 \times 10^{-5}$ & $4.94 \times 10^{-4}$ & $5.57 \times 10^{-4}$ & $6.92 \times 10^{-4}$ & $9.3\times$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Implication 2: to harvest equivariance gains in the trained
+model, train with GL.}
+Table~\ref{tab:perlayer} contrasts SiLU at DH default vs.\ DH $2\times$
+\emph{at training time}. A finer training-time grid lowers the absolute
+$L_0$ floor by $\sim$160$\times$ and propagates that smaller floor through
+all subsequent layers, while keeping the $L_0 \to L_1$ jump shape
+($\sim$8--9$\times$) essentially fixed. So the right intervention to
+reduce trained-model invariance error is to choose a better training-time
+grid (which is exactly where GL match-DH wins on the wall-clock axis at
+matched kernel-level equivariance, Fig.~\ref{fig:pareto}). This is the
+operational reason the paper recommends GL at training time, not just at
+inference: the per-layer floor is set when the model trains.
+
+\paragraph{Activation smoothness reshapes phase 1, not phase 2.}
+The $L_0 \to L_1$ ratio in Table~\ref{tab:perlayer} ranges from
+$1.5\times$ for ReLU to $15.7\times$ for tanh. Smoother activations
+(SiLU, tanh, Softplus(1)) have small $L_0$ values because their indirect
+coupling at layer~0 is weak, but a large jump at $L_1$ because the
+direct first-order contamination is equally strong for everyone. Less
+smooth activations (ReLU, $|\cdot|$) start with much larger $L_0$ from
+strong indirect coupling, so the jump ratio is small. The plateau
+shape (phase 2), in contrast, is essentially activation-independent.
 
 %========================================================================
 \section{Why Doesn't FFT Save the Day for DH?}
