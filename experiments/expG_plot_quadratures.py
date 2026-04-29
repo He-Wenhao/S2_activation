@@ -52,22 +52,42 @@ def lebedev_nodes(degree: int):
 
 
 def plot_sphere_with_nodes(ax, points, title, color="#d62728"):
-    # Solid translucent sphere
-    u = np.linspace(0, 2 * np.pi, 60)
-    v = np.linspace(0, np.pi, 40)
+    # Light, translucent wireframe sphere so back-facing nodes
+    # remain visible (the user noted nodes were hidden previously).
+    u = np.linspace(0, 2 * np.pi, 36)
+    v = np.linspace(0, np.pi, 24)
     su = np.outer(np.cos(u), np.sin(v))
     sv = np.outer(np.sin(u), np.sin(v))
     sw = np.outer(np.ones_like(u), np.cos(v))
-    ax.plot_surface(su, sv, sw, color="white", alpha=0.85,
-                     edgecolor="lightgray", linewidth=0.2, antialiased=True,
-                     rstride=3, cstride=3)
+    ax.plot_wireframe(su, sv, sw, color="lightgray", alpha=0.45,
+                      linewidth=0.5, rstride=2, cstride=2)
 
-    # Quadrature nodes
-    ax.scatter(points[:, 0] * 1.02, points[:, 1] * 1.02, points[:, 2] * 1.02,
-                s=35, c=color, edgecolor="black", linewidth=0.5,
-                depthshade=True, alpha=0.95)
+    # Front-back depth cue via z-coordinate (relative to viewing direction)
+    # but draw all nodes so none get culled.
+    n = points.shape[0]
+    # View direction at our (elev=18, azim=30) — approximate camera
+    # vector pointing toward viewer in world coords:
+    elev_rad, azim_rad = np.deg2rad(18), np.deg2rad(30)
+    cam = np.array([np.cos(elev_rad) * np.cos(azim_rad),
+                    np.cos(elev_rad) * np.sin(azim_rad),
+                    np.sin(elev_rad)])
+    dot = points @ cam  # +1 = facing camera, -1 = away
+    front = dot >= 0
+    back = ~front
 
-    ax.set_title(title, fontsize=12, pad=10)
+    # Back-facing nodes drawn first, more transparent so the wireframe
+    # shows through; front-facing on top, fully opaque.
+    if back.any():
+        ax.scatter(points[back, 0], points[back, 1], points[back, 2],
+                   s=22, c=color, edgecolor="black", linewidth=0.3,
+                   depthshade=False, alpha=0.45)
+    if front.any():
+        ax.scatter(points[front, 0] * 1.005, points[front, 1] * 1.005,
+                   points[front, 2] * 1.005,
+                   s=34, c=color, edgecolor="black", linewidth=0.5,
+                   depthshade=False, alpha=1.0)
+
+    ax.set_title(title, fontsize=11, pad=6)
     ax.set_box_aspect((1, 1, 1))
     ax.view_init(elev=18, azim=30)
     ax.grid(False)
