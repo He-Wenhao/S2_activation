@@ -1,0 +1,95 @@
+{
+  "args": {
+    "lmax": 6,
+    "mmax": 2,
+    "batch": 1024,
+    "n_channels": 128,
+    "n_warmup": 20,
+    "n_iter": 20,
+    "n_runs": 3,
+    "out": "results/expG_quadrature/four_way.json"
+  },
+  "device": "NVIDIA A100-SXM4-40GB",
+  "lmax": 6,
+  "mmax": 2,
+  "results": [
+    {
+      "method": "DH-dense default",
+      "n_points": 70,
+      "equiv_err_mean": 0.42368282586336137,
+      "equiv_err_std": 0.13543656648609437,
+      "kernel_ms_mean": 0.34029931218052906,
+      "kernel_ms_ci95": 0.0021602626220264083,
+      "kernel_ms_run_means": [
+        0.34125385573133826,
+        0.3395523061044514,
+        0.34009177470579743
+      ]
+    },
+    {
+      "method": "DH-dense match",
+      "n_points": 182,
+      "equiv_err_mean": 0.33460594549775124,
+      "equiv_err_std": 0.14830049398296738,
+      "kernel_ms_mean": 0.6204042428483566,
+      "kernel_ms_ci95": 0.004561321497062955,
+      "kernel_ms_run_means": [
+        0.6198469782248139,
+        0.6189114064909518,
+        0.622454343829304
+      ]
+    },
+    {
+      "method": "DH-FFT",
+      "n_points": 182,
+      "equiv_err_mean": 0.3346059919893742,
+      "equiv_err_std": 0.14830047387603873,
+      "kernel_ms_mean": 4.316315749504914,
+      "kernel_ms_ci95": 0.05210310102940706,
+      "kernel_ms_run_means": [
+        4.299189988523722,
+        4.310050199273974,
+        4.339707060717046
+      ]
+    },
+    {
+      "method": "GL match-DH",
+      "n_points": 182,
+      "equiv_err_mean": 0.3342051368951797,
+      "equiv_err_std": 0.1485728745742893,
+      "kernel_ms_mean": 0.5769102368503809,
+      "kernel_ms_ci95": 0.0027108322550064602,
+      "kernel_ms_run_means": [
+        0.5780704785138369,
+        0.576755590736866,
+        0.5759046413004398
+      ]
+    },
+    {
+      "method": "Lebedev (low)",
+      "n_points": 74,
+      "equiv_err_mean": 0.5110647228360176,
+      "equiv_err_std": 0.14288116179920785,
+      "kernel_ms_mean": 0.24559071365122995,
+      "kernel_ms_ci95": 0.0020971950381782943,
+      "kernel_ms_run_means": [
+        0.24655098095536232,
+        0.24525560438632965,
+        0.24496555561199784
+      ]
+    },
+    {
+      "method": "Lebedev (d=21)",
+      "n_points": 170,
+      "equiv_err_mean": 0.3344721049070358,
+      "equiv_err_std": 0.14923888293990184,
+      "kernel_ms_mean": 0.4134660237468779,
+      "kernel_ms_ci95": 0.0013415825930975381,
+      "kernel_ms_run_means": [
+        0.41382041526958346,
+        0.41284450562670827,
+        0.413733150344342
+      ]
+    }
+  ]
+}

@@ -144,6 +144,68 @@ def driscoll_healy_grid_matrices(lmax: int, n_beta: int = None,
                                   dtype=dtype, device=device)
 
 
+# ─── Lebedev quadrature ────────────────────────────────────────────────────
+
+def _lebedev_min_degree_for_lmax(lmax: int) -> int:
+    """Minimum Lebedev degree to integrate products of band-limited
+    functions of degree lmax exactly (i.e., degree 2*lmax)."""
+    target = 2 * lmax
+    # scipy.integrate.lebedev_rule supports odd degrees 3,5,7,...,131
+    candidates = [3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 35,
+                  41, 47, 53, 59, 65, 71, 77, 83, 89, 95, 101, 107, 113, 119,
+                  125, 131]
+    for d in candidates:
+        if d >= target + 1:  # +1 for safety; use odd >= target
+            return d
+    return 131
+
+
+def lebedev_grid_matrices(lmax: int, degree: int = None,
+                           dtype=torch.float32, device="cpu"):
+    """Build to_grid_mat / from_grid_mat using Lebedev quadrature.
+
+    Lebedev is non-tensor-product, so we reshape the (N,) flat grid as
+    (n_beta=1, n_alpha=N) to fit EquiformerV2's einsum signature.
+
+    Args:
+        lmax: max SH degree
+        degree: Lebedev rule degree (odd integer in scipy's supported set).
+                Default: smallest rule that integrates products of degree-lmax
+                functions exactly (i.e., needs ≥ 2*lmax exactness).
+    """
+    from scipy.integrate import lebedev_rule
+
+    if degree is None:
+        degree = _lebedev_min_degree_for_lmax(lmax)
+    xyz, w = lebedev_rule(degree)  # xyz: (3, N), w: (N,)
+    N = xyz.shape[1]
+
+    # Convert (x, y, z) → (β, α) in e3nn's convention:
+    #   x = sin(β) sin(α), y = cos(β), z = sin(β) cos(α)
+    x, y, z = xyz[0], xyz[1], xyz[2]
+    betas = np.arccos(np.clip(y, -1.0, 1.0))
+    alphas = np.arctan2(x, z)
+    # Wrap alphas to [0, 2π) for consistency
+    alphas = np.where(alphas < 0, alphas + 2 * math.pi, alphas)
+
+    betas_t = torch.from_numpy(betas).to(dtype=dtype)
+    alphas_t = torch.from_numpy(alphas).to(dtype=dtype)
+    weights_t = torch.from_numpy(w).to(dtype=dtype)
+
+    # Build points and Y_lm directly — Lebedev is non-tensor-product, so we
+    # bypass _build_grid_matrices (which assumes a (N_beta, N_alpha) tensor
+    # product) and construct flat tensors. We then reshape to
+    # (1, N, (lmax+1)^2) so the matrix is compatible with EquiformerV2's
+    # einsum signature.
+    points = torch.from_numpy(xyz.T).to(dtype=dtype)  # (N, 3)
+    Y = _real_sh_at_points(lmax, points)  # (N, (lmax+1)^2)
+
+    to_grid_mat = Y.unsqueeze(0).contiguous()                         # (1, N, M)
+    from_grid_mat = (Y * weights_t[:, None]).unsqueeze(0).contiguous()  # (1, N, M)
+
+    return to_grid_mat, from_grid_mat
+
+
 class CustomSO3Grid(torch.nn.Module):
     """
     Drop-in replacement for fairchem's SO3_Grid. Same `get_to_grid_mat` /
@@ -151,7 +213,8 @@ class CustomSO3Grid(torch.nn.Module):
     """
 
     def __init__(self, lmax: int, mmax: int, method: str = "gl",
-                 n_beta: int = None, n_alpha: int = None):
+                 n_beta: int = None, n_alpha: int = None,
+                 lebedev_degree: int = None):
         super().__init__()
         self.lmax = lmax
         self.mmax = mmax
@@ -164,6 +227,10 @@ class CustomSO3Grid(torch.nn.Module):
         elif method == "dh":
             to_grid_mat, from_grid_mat = driscoll_healy_grid_matrices(
                 lmax, n_beta=n_beta, n_alpha=n_alpha
+            )
+        elif method == "lebedev":
+            to_grid_mat, from_grid_mat = lebedev_grid_matrices(
+                lmax, degree=lebedev_degree
             )
         else:
             raise ValueError(f"Unknown quadrature method: {method}")
@@ -213,7 +280,8 @@ class CustomSO3Grid(torch.nn.Module):
 
 
 def patch_so3_grid(model: torch.nn.Module, method: str = "gl",
-                   n_beta: int = None, n_alpha: int = None) -> int:
+                   n_beta: int = None, n_alpha: int = None,
+                   lebedev_degree: int = None) -> int:
     """
     Replace all SO3_Grid instances in `model.backbone.SO3_grid` with
     CustomSO3Grid instances using the specified method.
@@ -232,7 +300,8 @@ def patch_so3_grid(model: torch.nn.Module, method: str = "gl",
         for old_grid in inner_list:
             new_grid = CustomSO3Grid(
                 old_grid.lmax, old_grid.mmax,
-                method=method, n_beta=n_beta, n_alpha=n_alpha
+                method=method, n_beta=n_beta, n_alpha=n_alpha,
+                lebedev_degree=lebedev_degree,
             ).to(device)
             new_inner.append(new_grid)
             n_replaced += 1
