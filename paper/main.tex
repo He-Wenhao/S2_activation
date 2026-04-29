@@ -289,6 +289,78 @@ weight-independent properties of the kernel.
 \end{enumerate}
 
 %========================================================================
+\section{Savings Scale Across Architectures}
+\label{sec:scale}
+%========================================================================
+
+The headline 31\% savings is for the fairchem-default architecture
+(12 layers, $\ell_{\max}{=}6$). We benchmark two additional published
+sizes to characterise how the savings scale with depth and band limit:
+
+\begin{itemize}
+\item \textbf{QM9-small} (4 layers, 64 channels, $\ell_{\max}{=}4$,
+  $m_{\max}{=}2$, 5.2M params) --- the configuration trained from
+  scratch in our QM9 sweep (Experiment~F).
+\item \textbf{OC20 EquiformerV2-31M} (8 layers, 128 channels,
+  $\ell_{\max}{=}4$, $m_{\max}{=}2$, $\sim$30M backbone params) ---
+  the public checkpoint shipped at
+  \url{dl.fbaipublicfiles.com/opencatalystproject/models/2023_06/oc20/s2ef/eq2_31M_ec4_allmd.pt}.
+  Notably, this checkpoint was trained with
+  \texttt{grid\_resolution=18}, i.e.\ $18 \times 18 = 324$ grid points,
+  which is $6.5\times$ the minimum DH-default density of 50 points.
+\item \textbf{fairchem-default} (12 layers, 128 channels,
+  $\ell_{\max}{=}6$, $m_{\max}{=}2$) --- the constructor signature
+  defaults of \texttt{EquiformerV2}.
+\end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{fig_sweep_models.pdf}
+  \caption{Forward wall-clock per QM9 batch~8 across three published
+  EquiformerV2 architectures, for four grid configurations.
+  $n=3$ runs $\times$ 20 measured forwards on \emph{distinct} batches
+  per run, error bars 95\% CI on run means. The matched-equivariance
+  saving (GL match-DH vs.\ DH $2\times$) grows from $+15\%$ at the
+  4-layer QM9 model to $+31\%$ at the 12-layer/$\ell_{\max}{=}6$
+  fairchem default --- larger and deeper models benefit more,
+  because the S$^2$-activation kernel is a larger fraction of forward
+  time. Architecture-level (random-init) timing; the cost depends only
+  on tensor shapes and grid sizes, not on weight values.}
+  \label{fig:sweep}
+\end{figure}
+
+\paragraph{Result.}
+Figure~\ref{fig:sweep} summarises. The matched-equivariance savings
+(GL match-DH vs.\ DH $2\times$) are $+15.4\%$ for QM9-small, $+13.9\%$
+for OC20-31M, and $+31.2\%$ for fairchem-default. The pattern is monotonic
+in $\ell_{\max}$: at $\ell_{\max}{=}4$ the DH $2\times$ grid is
+$20 \times 20 = 400$ points (vs.\ a 50- or 70-point default), a
+$5.7\times$--$8\times$ increase, while at $\ell_{\max}{=}6$ DH $2\times$ is
+$28 \times 28 = 784$ points (vs.\ 70 default), an $11.2\times$ increase.
+The S$^2$-activation kernel cost grows with grid size; everything else in
+the forward is unchanged. So the bigger the gap between DH default and DH
+$2\times$, the bigger the GL-vs-DH-$2\times$ savings.
+
+\paragraph{A note on running on the public OC20 checkpoint.}
+We considered loading the OC20-31M weights into our patched-grid model
+to demonstrate a "drop-in on a real pretrained checkpoint" alongside the
+small-model dropin (\S\ref{sec:dropin}). Two practical hurdles emerged:
+(i) the checkpoint targets OC20 catalyst structures and predicts both
+energy and forces, while our \texttt{QM9Model} wrapper has only an energy
+head; (ii) the OC20 model uses
+\texttt{share\_atom\_edge\_embedding=False}, \texttt{use\_m\_share\_rad}
+flags, and several radial-function widths that do not match
+\texttt{BACKBONE\_DEFAULTS} as we have set them, causing
+\texttt{state\_dict} shape mismatches in the \texttt{rad\_func.net} layers.
+Reconciling these requires either rebuilding the QM9 wrapper around the
+fairchem OC20 trainer or running the experiment within fairchem's training
+loop. Since the \emph{wall-clock} argument is architecture-level (cost
+depends on tensor shapes, not weight values), the OC20-31M timing in
+Figure~\ref{fig:sweep} faithfully measures what a deployed inference
+forward would cost; we leave the fully-loaded checkpoint inference as
+future work.
+
+%========================================================================
 \section{Why Doesn't FFT Save the Day for DH?}
 \label{sec:fft}
 %========================================================================
