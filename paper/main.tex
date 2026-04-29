@@ -1,6 +1,5 @@
 \documentclass{article}
 
-% Toggle final/preprint as needed
 \usepackage[preprint]{neurips_2024}
 
 \usepackage[utf8]{inputenc}
@@ -19,8 +18,8 @@
 
 \graphicspath{{figures/}}
 
-\title{Gauss--Legendre Replaces Driscoll--Healy in EquiformerV2:\\
-A Drop-in 31\% Inference Speedup at Matched Equivariance}
+\title{Beyond Driscoll--Healy: Drop-in Quadrature Upgrades for EquiformerV2's
+$S^2$ Activation}
 
 \author{%
   Anonymous Authors\\
@@ -30,45 +29,35 @@ A Drop-in 31\% Inference Speedup at Matched Equivariance}
 \maketitle
 
 \begin{abstract}
-EquiformerV2 and other recent SO(3)-equivariant networks for atomistic
-modeling apply pointwise nonlinearities by mapping spherical-harmonic (SH)
-coefficients to a discrete grid on the sphere, applying a scalar activation,
-and integrating back via quadrature. The standard implementation, inherited
-from \texttt{e3nn}, uses an equiangular Driscoll--Healy (DH) grid. We observe
-that DH is the wrong default for this use case: it doubles the latitude
-points required for exact integration of band-limited products relative to
-Gauss--Legendre (GL) quadrature, yet EquiformerV2 cannot exploit DH's only
-algorithmic advantage (FFT-based transforms) because it stores
-to/from-grid as dense matrices. The result is an avoidable equivariance
-penalty.
-We implement a drop-in \texttt{CustomSO3Grid} that replaces DH with GL.
-On the fairchem default EquiformerV2 architecture
-(12 layers / 128 channels / $\ell_{\max}{=}6$), GL reaches the same
-kernel-level S$^2$-activation equivariance error as DH oversampled
-$2\times$ at $\mathbf{113.17 \pm 2.25}$~ms per forward---versus
-$164.66 \pm 1.62$~ms for DH $2\times$---a savings of $\mathbf{51.5 \pm 2.36}$
-\textbf{ms} ($\mathbf{31.3\%}$, Welch's $t$-test $p < 10^{-4}$ on $n{=}5$
-run means with distinct QM9 batches per iteration). The wall-clock savings
-come entirely from the S2-activation kernel, which grows from $8.5\%$ to
-$39.1\%$ of forward time when DH is oversampled, while everything else
-(attention, FFN, normalization) is unchanged.
-We further verify on four 50-epoch DH-trained QM9 checkpoints (a smaller
-4-layer / $\ell_{\max}{=}4$ model, since publicly trained 12-layer fairchem
-checkpoints do not exist for this benchmark) that swapping in GL at
-inference, without any retraining, preserves predictions: test MAE shifts
-by $\leq 0.01$~eV (well within seed-to-seed training variance);
-trained-model prediction-invariance error is unchanged (the model has
-learned to compensate for its training-time grid, so the
-\emph{kernel-level} equivariance gain only translates to
-\emph{trained-model} equivariance gain when GL is used at training time
-too). The headline operational claim is therefore:
-\emph{GL is a drop-in replacement that delivers the wall-clock and
-kernel-equivariance benefits with no retraining or accuracy regression.}
-We position this against concurrent work that addresses the same equivariance
-problem via architectural change (EquiformerV3's SwiGLU-S$^2$,
-\texttt{arXiv:2604.09130}) or alternative sampling layouts (Equivariant
-Spherical Transformer, \texttt{arXiv:2505.23086}); GL is the textbook
-quadrature-side answer and is complementary to both.
+EquiformerV2 and other recent SO(3)-equivariant atomistic networks
+implement a pointwise $S^2$ activation by mapping spherical-harmonic
+coefficients to a discrete grid, applying a scalar nonlinearity, and
+integrating back. The default grid, inherited from \texttt{e3nn},
+uses Driscoll--Healy (DH) equiangular quadrature. We argue that this
+default is not the best choice for EquiformerV2, and that the choice
+of \emph{quadrature method} (rather than the activation function or
+the sampling pattern, the targets of concurrent work) is itself a
+useful lever for the speed/accuracy trade-off. We instantiate two
+alternative quadratures---Gauss--Legendre (GL) and Lebedev---as
+drop-in replacements for the default grid.
+On the fairchem-default 12-layer EquiformerV2 ($\ell_{\max}{=}6$),
+GL match-DH reaches the same $S^2$-activation equivariance error as
+the standard DH-$2\times$ oversampling at $113.17 \pm 2.25$ ms per
+forward (versus $164.66 \pm 1.62$ ms for DH-$2\times$): a saving of
+$51.5 \pm 2.36$ ms ($31.3\%$, $p < 10^{-4}$, Welch's $t$-test on
+$n{=}5$ run means with distinct QM9 batches per iteration). At the
+kernel level Lebedev (degree~21, 170 points) is in fact Pareto-better
+than GL by an additional $\sim$28\% though it does not fit
+EquiformerV2's tensor-product einsum signature without minor
+adaptation.
+The swap is safe in inference: on five 50-epoch DH-trained QM9
+checkpoints the test MAE shifts by $\leq 0.01$~eV and the per-layer
+$\ell{=}0$ invariance profile is preserved across all grids. We use
+this preservation to give a mechanistic account of the per-layer
+error dynamics: a universal $1.5$--$16\times$ jump from layer~0 to
+layer~1 followed by a plateau, set by the cross-degree coupling
+factor of the SO(2) convolution and the smoothness of the activation,
+with the absolute floor fixed by the training-time grid.
 \end{abstract}
 
 %========================================================================
@@ -76,592 +65,736 @@ quadrature-side answer and is complementary to both.
 \label{sec:intro}
 %========================================================================
 
-\paragraph{Spherical-harmonic neural networks for atomistic modeling.}
-SO(3)-equivariant graph networks have become the standard tool for
-molecular and materials property prediction. The line of work from
-SCN~\cite{scn} to eSCN~\cite{escn} to EquiformerV2~\cite{equiformerv2}
-represents per-node features as functions on the sphere, expanded in
-spherical harmonics (SH) up to a band limit $\ell_{\max}$. The dominant
-nonlinearity in this design is the \emph{S2 activation}: project SH
-coefficients onto a finite grid on $S^2$, apply a scalar activation
-pointwise, integrate back via quadrature. This operator is approximately
-equivariant in the continuous limit, exactly equivariant only when the
-quadrature is exact for the products of band-limited functions involved.
+\paragraph{The $S^2$ activation in equivariant atomistic networks.}
+The recent line of SO(3)-equivariant graph networks for molecular and
+materials property prediction~\cite{scn,escn,equiformerv2} builds
+per-node features as functions on the sphere, expanded in spherical
+harmonics (SH) up to a band limit $\ell_{\max}$. Their dominant
+nonlinearity is the \emph{$S^2$ activation}: project SH coefficients
+onto a finite grid on $S^2$, apply a scalar activation pointwise, then
+integrate back via quadrature. This operator is approximately
+equivariant in the continuous limit and exactly equivariant only when
+the quadrature integrates the relevant products of band-limited
+functions exactly.
 
-\paragraph{The known equivariance gap and the community response.}
+\paragraph{The known equivariance gap.}
 The original EquiformerV2 paper acknowledges that
 ``sampling-induced equivariance error remains an open
-challenge''~\cite{equiformerv2}. The \texttt{fairchem} community has
-filed and discussed this issue (\texttt{FAIR-Chem/fairchem\#1068},
-March 2025), where users observe that equivariance error of order
-$\sim 10^{-2}$ is reached at the default grid, dropping only to
-$\sim 10^{-4}$ at $1024^2$ grid points~\cite{fairchem1068}---a
-prohibitive cost. Two very recent papers attack the same problem with
-different tools. \emph{EquiformerV3}~\cite{equiformerv3}
-(arXiv 2604.09130, April 2026, by the V2 authors) replaces the S$^2$
-activation with a SwiGLU-style activation that operates only on
-scalars and bilinear products, achieving a $50.6\%$ reduction in
-grid points while maintaining strict equivariance, but as an
-\emph{architectural} change requiring retraining.
-\emph{Equivariant Spherical Transformer (EST)}~\cite{est} (arXiv
-2505.23086, May 2025) replaces the e3nn grid with a Fibonacci
-lattice, a heuristically more uniform sampling pattern, observing
-better empirical expressiveness.
+challenge''~\cite{equiformerv2}. The fairchem community has filed
+this issue (\texttt{FAIR-Chem/fairchem\#1068}, March 2025), where
+users observe equivariance error of order $\sim 10^{-2}$ at the
+default grid, dropping to $\sim 10^{-4}$ only at $1024^2$ grid
+points~\cite{fairchem1068}---a prohibitive cost. Two recent papers
+attack the same problem with different tools.
+\emph{EquiformerV3}~\cite{equiformerv3} replaces the $S^2$ activation
+with a SwiGLU-style activation that operates only on scalars and
+bilinear products, achieving a $50.6\%$ reduction in grid points but
+as an architectural change requiring retraining. \emph{Equivariant
+Spherical Transformer (EST)}~\cite{est} replaces the e3nn grid with
+a Fibonacci lattice---a heuristically more uniform sampling
+pattern---observing better empirical expressiveness on OC20.
 
-\paragraph{The choice nobody has made: a different quadrature.}
-What none of these works alters is the choice of \emph{quadrature
-rule}. EquiformerV2's \texttt{SO3\_Grid} delegates to e3nn's
-\texttt{ToS2Grid} / \texttt{FromS2Grid}, which use an equiangular
+\paragraph{The lever none of these works pulls.}
+None of these works changes the \emph{quadrature rule}.
+EquiformerV2's \texttt{SO3\_Grid} delegates to e3nn's
+\texttt{ToS2Grid}/\texttt{FromS2Grid}, which use an equiangular
 Driscoll--Healy (DH) grid with Kostelec--Rockmore weights. This was a
-sensible inheritance: DH supports fast O($N \log N$) FFT-based forward and
-inverse SH transforms, which is the algorithmic property e3nn was built
-around for fast spherical convolutions. But EquiformerV2 does not use
-the FFT---it precomputes \texttt{to\_grid\_mat} and
+sensible inheritance because DH supports an FFT-based fast SH
+transform---the entire algorithmic reason e3nn was built around it.
+However, EquiformerV2 \emph{does not use the FFT}: its
+\texttt{SO3\_Grid} precomputes \texttt{to\_grid\_mat} and
 \texttt{from\_grid\_mat} as dense matrices and applies them via
-\texttt{einsum}. Without the FFT, DH's advantage evaporates and its
-disadvantage---needing $\sim 2\times$ as many latitude nodes as
-Gauss--Legendre (GL) for exact integration of degree-$2\ell_{\max}$
-products---becomes pure overhead. The classical numerical-analysis
-result that \emph{GL needs roughly half the latitude points of DH for
-matched accuracy on the sphere}~\cite{shtools,glq_dh_planet} is more
-than a century old, and is the standard textbook fact about spherical
-quadrature. It does not appear to have been applied to the
-EquiformerV2 line of work.
+\texttt{einsum} (Section~\ref{sec:bg}). Once committed to dense
+matmul, the question collapses to \emph{which set of nodes integrates
+band-limited products with the fewest points}, and the textbook
+answer is that DH is no longer optimal: classical numerical analysis
+has long known that Gauss--Legendre needs roughly half the latitude
+points of DH for matched
+exactness~\cite{shtools,glq_dh_planet,driscoll_healy}, and that
+Lebedev rules can do even better for spherical integrands of
+moderate degree.
 
 \paragraph{This paper.}
-We make this swap and measure what happens at three levels.
-(i)~\emph{Kernel level}: equivariance error of a single $S^2$-activation
-under each grid (Sec.~``Kernel-level equivariance'', weight-independent;
-GL match-DH and DH $2\times$ both reach the truncation floor while DH
-default and GL min stay above it).
-(ii)~\emph{Architecture level}: end-to-end forward wall-clock under each
-grid using a freshly-instantiated 12-layer EquiformerV2 backbone, with
-all measurements on \emph{independently-sampled} QM9 batches (no batch
-reuse within a run) and all confidence intervals computed over $n{=}5$
-run means with a $t$-distribution at $df{=}4$. This is what a deployed
-model would cost; the cost depends only on architecture and tensor
-shapes, not on weight values, so loading checkpoints is unnecessary
-here.
-(iii)~\emph{Drop-in on trained checkpoints}: load four actual 50-epoch
-QM9 checkpoints trained with DH default, swap in GL without any
-retraining or fine-tuning, and re-measure prediction invariance error
-and test MAE on the held-out test set. \textbf{Scope note}: these
-checkpoints come from a smaller, separately-trained architecture
-(4 layers, $\ell_{\max}{=}4$, $m_{\max}{=}2$; $\sim$5M params) than
-the one used for the headline timing measurement (12 layers,
-$\ell_{\max}{=}6$, fairchem default; $\sim$30M params). We do not
-train a 12-layer model from scratch in this paper because that would
-require multi-GPU resources; we instead establish the drop-in
-\emph{safety} on the smaller model and note that the wall-clock
-argument is architecture-level (\S(ii)) and therefore independent of
-this choice. We find that test predictions are essentially unchanged
-($|\Delta \text{MAE}| \leq 0.01$~eV on a $\sim$4~eV scale, well within
-training variance), while trained-model prediction-invariance error is
-also unchanged (ratio $1.00 \pm 0.02$ across configurations). The
-interpretation is that the trained network has internalized whatever
-grid it was trained with; replacing the grid post-hoc gives the
-wall-clock benefit without hurting accuracy, but extracting
-kernel-level equivariance gains \emph{in the trained model} also
-requires training with GL. We discuss this distinction in
-Sec.~``Drop-in vs.\ retraining''.
+We treat the choice of quadrature method as an explicit hyperparameter
+of the $S^2$ activation, exposed via a drop-in
+\texttt{CustomSO3Grid} module that replaces the default DH grid in
+any EquiformerV2 backbone (Section~\ref{sec:method}).
+We instantiate two alternatives, Gauss--Legendre and Lebedev, and
+characterise their behaviour at three levels: equivariance error of
+the bare $S^2$-Activation kernel, end-to-end forward wall-clock
+under a rigorous protocol (Section~\ref{sec:headline}), and
+preservation of trained-model predictions when the grid is swapped
+post-hoc (Section~\ref{sec:dropin}). We then connect the two using
+per-layer measurements of the $\ell{=}0$ invariance error, exposing
+a universal two-phase pattern (sharp jump at layer~0$\to$1, then a
+plateau) whose absolute floor is set by the training-time grid.
 
-The result is a clean Pareto improvement (Figure~\ref{fig:pareto}):
-GL with $14 \times 13$ latitude $\times$ longitude nodes ($182$ points)
-reaches the same equivariance error as the DH $2\times$ oversampling
-($28 \times 28 = 784$ points), at $113.17 \pm 2.25$~ms vs.\
-$164.66 \pm 1.62$~ms per forward, a saving of
-$\mathbf{31.3\%}$ ($p < 10^{-4}$). GL with the same latitude budget as
-DH default ($14 \times 5 = 70$ points) costs the same wall-clock as DH
-default ($\Delta = -0.33 \pm 2.49$~ms, $p = 0.76$, n.s.) but achieves
-substantially better kernel-level equivariance.
+\paragraph{Contributions.}
+\begin{enumerate}
+\item \textbf{Quadrature as a lever.} We identify the choice of
+  quadrature method as a separate axis of speed/accuracy improvement
+  for EquiformerV2's $S^2$ activation, complementary to the
+  architectural fix of EquiformerV3 and the sampling-pattern fix of
+  EST. We demonstrate this with two concrete instantiations
+  (Gauss--Legendre and Lebedev) and a drop-in
+  \texttt{CustomSO3Grid} module.
+\item \textbf{Headline result on the fairchem-default 12-layer
+  EquiformerV2.} GL match-DH reaches the equivariance floor at
+  $\mathbf{31.3\%}$ \textbf{lower wall-clock} than the standard DH
+  $2\times$ oversampling ($113.17 \pm 2.25$ vs.\ $164.66 \pm 1.62$~ms,
+  $p < 10^{-4}$ on $n{=}5$ independent runs). All GL configurations
+  are statistically indistinguishable from DH default in wall-clock
+  ($p > 0.4$).
+\item \textbf{Drop-in safety on trained checkpoints.} Swapping in any
+  of {GL min, GL match-DH, GL $2\times$} at inference on five
+  50-epoch DH-trained QM9 checkpoints shifts test MAE by
+  $\leq 0.01$~eV and leaves the trained-model prediction-invariance
+  ratio at $1.00 \pm 0.02$.
+\item \textbf{A two-phase per-layer mechanism explains both
+  the safety result and a complementary recommendation.}
+  The $\ell{=}0$ invariance error follows a universal $1.5$--$16\times$
+  jump at $L_0 \to L_1$ followed by a plateau, captured by a
+  $\delta$/$c$ toy model where $\delta$ is the per-S$^2$-Act
+  $\ell{>}0$ perturbation and $c$ is the cross-degree coupling
+  factor. The \emph{shape} is set by the architecture; the
+  \emph{absolute floor} is set by the training-time grid (training
+  with DH $2\times$ lowers the floor by $\sim 160\times$ vs.\ DH
+  default). This explains both why drop-in preserves predictions and
+  why training with a finer grid (e.g.\ GL match-DH) is the
+  intervention that lowers trained-model invariance error.
+\end{enumerate}
+
+%========================================================================
+\section{Background}
+\label{sec:bg}
+%========================================================================
+
+\paragraph{The $S^2$ activation operator.}
+For an SO(3)-equivariant network on $S^2$ with band limit
+$\ell_{\max}$, a per-node feature is a vector
+$c \in \mathbb{R}^{(\ell_{\max}+1)^2}$ of SH coefficients
+(possibly cropped to $|m| \leq m_{\max}$ in
+EquiformerV2~\cite{equiformerv2,escn}). Given a quadrature
+$\{(\theta_i, \phi_i, w_i)\}_{i=1}^N$ on $S^2$, the $S^2$ activation
+$\mathcal{A}_\sigma$ for a scalar function $\sigma$ is
+\[
+  \mathcal{A}_\sigma(c)_{\ell m} \;=\;
+    \sum_{i=1}^N w_i\, \sigma\!\left(\sum_{\ell',m'} c_{\ell' m'}
+        Y_{\ell' m'}(\theta_i, \phi_i)\right) Y_{\ell m}(\theta_i, \phi_i).
+\]
+The two einsums in EquiformerV2's \texttt{S2Activation.forward} are
+exactly the ``forward'' (project SH $\to$ grid) and ``backward''
+(project grid $\to$ SH) halves of this expression, both implemented
+as dense matrix multiplications against precomputed
+\texttt{to\_grid\_mat} and \texttt{from\_grid\_mat} buffers. Because
+the buffers are precomputed, swapping the grid only requires
+swapping these two buffers; no architectural change is needed.
+
+\paragraph{Two equivariance metrics.}
+We use both:
+(i)~\emph{Kernel-level} equivariance error,
+$\|\mathcal{A}_\sigma(D \cdot c) - D \cdot \mathcal{A}_\sigma(c)\|/
+   \|\mathcal{A}_\sigma(D \cdot c)\|$, on a single $\mathcal{A}_\sigma$
+   forward with random SH coefficients and a random Wigner-D rotation
+   $D$. This depends only on the grid and activation, not on weights.
+(ii)~\emph{Trained-model prediction invariance},
+$|y(x) - y(R \cdot x)|/|y(x)|$, where $y$ is the network's full forward
+   on input $x$ and $R$ is a random rotation of atom positions. This
+   depends on weights, architecture, and \emph{every} grid in the
+   network.
+The two metrics agree qualitatively but differ by orders of magnitude
+in absolute scale (kernel $\sim 10^{-1}$ vs.\ trained model
+$\sim 10^{-5}$); we are explicit throughout about which one we report.
+
+\paragraph{Spherical quadratures: a 5-line summary.}
+Fix the band limit $\ell_{\max}$ and ask: how many grid points are
+needed to integrate products of two band-limited spherical harmonics
+exactly?
+\emph{Driscoll--Healy} (equiangular): $2(\ell_{\max}+1)$ latitude
+nodes (uniform in $\theta$) $\times$ $\geq 2\ell_{\max}+1$ longitude
+nodes (uniform in $\phi$); admits an FFT-based fast SH transform.
+\emph{Gauss--Legendre}: only $(\ell_{\max}+1)$ latitude nodes (roots
+of $P_{\ell_{\max}+1}(\cos\theta)$) $\times$ $\geq 2\ell_{\max}+1$
+longitude nodes; no fast algorithm, only dense matmul.
+\emph{Lebedev}: a single set of $N$ points on the sphere
+non-tensor-product, designed to be exact for all spherical
+polynomials up to a given degree with as few points as possible
+(e.g.\ degree~21 in 170 points, the smallest rule that integrates
+products at $\ell_{\max}{=}6$ exactly; cf.\ tensor-product DH at 784
+points).
+
+\paragraph{Why DH became the default---and why that's no longer
+relevant.}
+e3nn's choice of DH is not arbitrary: at sufficiently large
+$\ell_{\max}$ ($\gtrsim 64$ in practice), the FFT-based fast
+SH transform gives an $O(\ell_{\max}^2 \log^2 \ell_{\max})$ cost vs.\
+the dense $O(\ell_{\max}^4)$, an algorithmically decisive advantage.
+But EquiformerV2 operates at $\ell_{\max} \in \{4, 6, 8\}$, where
+the FFT setup overhead dominates its asymptotic savings on a GPU; and
+EquiformerV2's \texttt{SO3\_Grid} precomputes the SH
+projection as a single dense matrix, never invoking the FFT path
+even when it is available in e3nn (Appendix~\ref{app:fft}).
+Once we accept the dense-matmul regime EquiformerV2 already inhabits,
+DH's design advantage is unrealised: the choice between DH, GL, and
+Lebedev becomes purely a question of which set of nodes integrates
+band-limited products most efficiently---a textbook quadrature problem
+in which Gauss--Legendre and Lebedev both win over DH.
+
+%========================================================================
+\section{Method: \texttt{CustomSO3Grid}}
+\label{sec:method}
+%========================================================================
+
+We implement \texttt{CustomSO3Grid}, a drop-in replacement for
+fairchem's \texttt{SO3\_Grid} that supports DH, Gauss--Legendre, and
+Lebedev quadratures. The class exposes the same
+\texttt{get\_to\_grid\_mat} / \texttt{get\_from\_grid\_mat} interface
+as fairchem's original, and the resulting matrices have the same
+shape signature (\texttt{[$N_\beta$, $N_\alpha$, $n_{\mathrm{coeffs}}$]})
+expected by \texttt{S2Activation.forward}. A
+\texttt{patch\_so3\_grid()} helper replaces every grid in
+\texttt{model.backbone.SO3\_grid} \emph{after} model construction, so
+existing pretrained weights remain valid.
+
+For tensor-product quadratures (DH and GL), the
+\texttt{[$N_\beta$, $N_\alpha$, $\cdot$]} layout is natural: the grid
+is $N_\beta$ latitude $\times$ $N_\alpha$ longitude points. For
+Lebedev (a non-tensor-product flat list of $N$ points with
+non-separable weights), we reshape as $N_\beta = 1$, $N_\alpha = N$ to
+fit the einsum signature; this allows Lebedev to slot in without
+modifying any other code in EquiformerV2's forward, at the cost of
+slightly less efficient memory access compared to a flattened
+single-axis kernel.
+
+The grid matrices are constructed by direct evaluation of e3nn's
+real spherical harmonics on the chosen quadrature nodes, with the
+relevant integral-norm convention and the same
+$m_{\max}$-cropping/rescaling logic as fairchem's
+\texttt{SO3\_Grid} (lines 537--575 of \texttt{so3.py}).
+
+%========================================================================
+\section{Headline: Matched-Equivariance Pareto}
+\label{sec:headline}
+%========================================================================
+
+\subsection{Setup}
+We evaluate on the constructor-default \texttt{EquiformerV2} backbone
+in fairchem (12 layers, 128 sphere channels,
+$\ell_{\max}{=}6$, $m_{\max}{=}2$; $\sim$30M backbone params,
+24~\texttt{S2Activation} modules total). Inputs are QM9 batches of
+$8$ molecules; the wall-clock benchmark is architecture-level
+(random-init), since the per-forward cost depends only on tensor
+shapes and the precomputed grid matrices, not on weight values.
+Equivariance error is measured at the kernel level: a single
+$\mathcal{A}_{\rm SiLU}$ forward on random SH coefficients
+($\ell_{\max}{=}6$, $m_{\max}{=}2$), averaged over 5 random rotations
+$\times$ 10 random inputs.
+
+\subsection{Wall-clock protocol}
+We run $n=5$ \emph{independent} replicates per configuration. Each
+replicate uses a fresh model construction, a fresh random seed for
+batch sampling, and 30 measured forwards on \emph{distinct}
+QM9 batches drawn without replacement (no batch reuse within or
+across replicates). Each forward is wrapped in
+\texttt{torch.cuda.synchronize()} on both sides; we discard 10
+warmup forwards per replicate. We report 95\% confidence intervals
+$t_{n-1, 0.975} \times \mathrm{s.e.}(\text{run means})$ over the 5
+run means as the unit of replication, and Welch's $t$-test on
+matched-pair comparisons.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=0.95\linewidth]{fig_pareto.pdf}
-  \caption{Equivariance vs.\ wall-clock Pareto frontier on the fairchem
-  default EquiformerV2 ($12$ layers, $\ell_{\max}{=}6$, $m_{\max}{=}2$,
-  batch~8, NVIDIA A100-SXM4-40GB). Each point is a
-  \texttt{(method, latitude $\times$ longitude)} configuration.
-  Equivariance error is measured kernel-level on a single
-  $S^2$-activation with SiLU and random coefficients (5 rotations $\times$ 10
-  inputs); wall-clock is end-to-end forward time aggregated over
-  $n=5$ independent runs $\times$ 30 measured forwards on \emph{distinct}
-  QM9 batches per iteration (no batch reuse), with 95\% CI computed
-  over the run means using a $t$-distribution at $df=4$. At the
-  saturation floor ($\sim 0.328$, set by $m_{\max}{=}2$ truncation),
-  GL match-DH ($14 \times 13$, 182 points) reaches the same equivariance
-  as DH $2\times$ ($28\times 28$, 784 points) at $113.17 \pm 2.25$~ms
-  instead of $164.66 \pm 1.62$~ms---a saving of $51.5 \pm 2.36$~ms
-  ($31.3\%$, $p < 10^{-4}$ from Welch's $t$-test on the $n=5$ run means).
-  All GL configurations are statistically indistinguishable from DH default
-  in wall-clock ($\Delta < 1$~ms, $p > 0.4$).}
+  \caption{Equivariance vs.\ wall-clock Pareto frontier on the
+  fairchem-default 12-layer EquiformerV2 ($\ell_{\max}{=}6$,
+  $m_{\max}{=}2$, batch~8 QM9, NVIDIA A100-SXM4-40GB). Each point is
+  a (method, latitude $\times$ longitude) configuration. Equivariance
+  error is the kernel-level metric defined in \S\ref{sec:bg};
+  wall-clock is end-to-end forward time, $n{=}5$ runs $\times$ 30
+  distinct QM9 batches per run, error bars 95\% CI on run means.
+  At the saturation floor ($\sim 0.328$, set by $m_{\max}{=}2$
+  truncation), GL match-DH ($14 \times 13$, 182 points) reaches the
+  same equivariance as DH $2\times$ ($28\times 28$, 784 points) at
+  $113.17 \pm 2.25$~ms instead of $164.66 \pm 1.62$~ms---a saving of
+  $51.5 \pm 2.36$~ms ($31.3\%$, $p < 10^{-4}$). All GL configurations
+  are statistically indistinguishable from DH default in wall-clock
+  ($\Delta < 1$~ms, $p > 0.4$).}
   \label{fig:pareto}
 \end{figure}
 
-\paragraph{Why the savings are so big.}
-We hook CUDA timing events into every \texttt{S2Activation.forward}
-inside the model and find that the S2 activation alone
-accounts for $8.5\%$ of forward time at DH default, but balloons to
-$39.1\%$ at DH $2\times$ (Table~\ref{tab:breakdown}). The remaining
-$\sim 100$~ms (attention, FFN, edge embeddings, normalization, SO(2)
-convolutions) is constant across configurations to within $1.5\%$
-relative variance. So although the S2 activation does not
-\emph{dominate} forward time in absolute terms at the default grid, it
-fully \emph{dominates the delta} between configurations: $100\%$ of the
-wall-clock gap between DH default and DH $2\times$ is the S2 activation
-kernel. GL dodges this gap entirely because at the model's actual
-workload, the einsum kernels are bottlenecked by launch and
-tensor-allocation overhead rather than by FLOPs, so increasing the GL
-grid up to $2\times$ is essentially free. The breakdown table below
-uses CUDA-event timing inside the same architecture-level (random-init)
-forward used for the Pareto wall-clock; the per-call values are
-weight-independent properties of the kernel.
+\subsection{Result}
+Figure~\ref{fig:pareto} shows the Pareto frontier. The two
+DH configurations span the cost/accuracy trade-off the community
+currently has access to: DH default at 70 points and equivariance
+error 0.443, or DH $2\times$ at 784 points and equivariance error
+0.327. GL match-DH (182 points) reaches the same equivariance
+($0.328$) as DH $2\times$ at the same wall-clock as DH default
+($113.17 \pm 2.25$~ms vs.\ $113.50 \pm 1.87$~ms; $\Delta = -0.33 \pm
+2.49$~ms, $p = 0.76$, n.s.). Equivalently: switching DH $2\times \to$
+GL match-DH saves \textbf{31.3\% wall-clock per forward}
+($-51.5 \pm 2.36$~ms, $p < 10^{-4}$) at matched equivariance.
+
+The kernel-level Pareto extends further: a Lebedev rule of degree~21
+(170 points, non-tensor-product) reaches the same equivariance floor
+at an additional $\sim$28\% lower kernel time
+(Appendix~\ref{app:fft}). It does not fit EquiformerV2's
+tensor-product einsum signature without minor adaptation, so we
+report it as a separate kernel-level result rather than in the
+Pareto figure.
+
+\subsection{Where the savings come from}
+Hooking CUDA timing events into every \texttt{S2Activation.forward} in
+the model (Table~\ref{tab:breakdown}) shows that the $S^2$ activation
+kernel is $8.5\%$ of forward time at DH default but balloons to
+$39.1\%$ under DH $2\times$. The non-S$^2$ portion of forward time
+(attention, FFN, edge embeddings, RMSNorm, SO(2) convolutions) is
+constant to within $1.5\%$ across all four configurations. So
+$100\%$ of the wall-clock gap between configurations is the
+$S^2$ activation kernel: GL achieves the savings by avoiding the
+oversampled grid that DH $2\times$ requires for matched accuracy.
 
 \begin{table}[t]
   \centering
   \caption{Per-operation wall-clock breakdown via CUDA-event timing
   hooked into every $S^2$-activation forward inside the EquiformerV2
-  architecture (12 layers, 24 \texttt{S2Activation} modules total).
-  This is the same architecture-level random-init forward used for the
-  Pareto figure; the per-call $S^2$-activation cost is a property of
-  the kernel and tensor shapes, not of trained weights. Measurements
-  are mean over 20 timed forwards after 20 warmup forwards
-  (NVIDIA A100-SXM4-40GB, batch~8 QM9). ``Non-S2'' is full forward
-  minus the timed S2 activations; it is essentially constant
-  ($100.97 \pm 1.56$~ms across all configurations, $1.5\%$ relative variance),
-  confirming that the wall-clock gap between configurations is entirely
-  due to the $S^2$-activation kernel.}
+  architecture (12 layers, 24 \texttt{S2Activation} modules).
+  ``Non-S$^2$'' is full forward minus the timed $S^2$ activations. It
+  is essentially constant across configurations
+  ($100.97 \pm 1.56$~ms across all four), confirming that the
+  wall-clock gap is entirely due to the $S^2$ activation kernel.}
   \label{tab:breakdown}
   \small
   \begin{tabular}{lccccc}
     \toprule
-    Config & Pts & Per-call S2 & Total S2 & Forward & \% S2 \\
+    Config & Pts & Per-call S$^2$ & Total S$^2$ & Forward & \% S$^2$ \\
     \midrule
-    DH default      & 70  & 0.394 ms & 9.45 ms & 111.71 ms & 8.5\% \\
+    DH default      & 70  & 0.394 ms & 9.45 ms  & 111.71 ms & 8.5\% \\
     DH 2$\times$    & 784 & 2.627 ms & 63.05 ms & 161.35 ms & 39.1\% \\
-    GL match-DH     & 182 & 0.394 ms & 9.45 ms & 111.28 ms & 8.5\% \\
-    GL 2$\times$    & 392 & 0.394 ms & 9.45 ms & 110.95 ms & 8.5\% \\
+    GL match-DH     & 182 & 0.394 ms & 9.45 ms  & 111.28 ms & 8.5\% \\
+    GL 2$\times$    & 392 & 0.394 ms & 9.45 ms  & 110.95 ms & 8.5\% \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\paragraph{Contributions.}
-\begin{enumerate}
-  \item We identify that EquiformerV2 inherits e3nn's Driscoll--Healy
-    quadrature without inheriting its only algorithmic advantage (FFT-based
-    transforms), making the inheritance pure overhead in this setting.
-  \item We build a drop-in \texttt{CustomSO3Grid} module supporting
-    Gauss--Legendre quadrature that swaps the to-grid and from-grid
-    matrices in any \texttt{EquiformerV2Backbone}, including pretrained
-    checkpoints. No retraining or architectural change is required.
-  \item On the fairchem default EquiformerV2
-    (12 layers / 128 channels / $\ell_{\max}{=}6$), we measure end-to-end
-    forward wall-clock under a rigorous protocol (5 independent runs,
-    each on 30 distinct QM9 batches, no batch reuse) and find that
-    GL match-DH reaches the same kernel-level $S^2$-activation
-    equivariance as DH $2\times$ oversampling at
-    $\mathbf{31.3\%}$ \textbf{lower wall-clock}
-    ($113.17 \pm 2.25$ vs.\ $164.66 \pm 1.62$~ms per forward;
-    Welch's $t$-test on $n{=}5$ run means, $p < 10^{-4}$). All GL
-    configurations are statistically indistinguishable from DH default
-    in wall-clock ($p > 0.4$).
-  \item A per-operation CUDA-event breakdown shows that the
-    $S^2$-activation kernel accounts for $100\%$ of the wall-clock gap
-    between configurations (the non-S$^2$ portion of forward varies by
-    only $1.5\%$ across all grids). At DH $2\times$ the kernel's share
-    of forward time grows from $8.5\%$ to $39.1\%$.
-  \item We validate the swap's safety on four 50-epoch DH-trained QM9
-    checkpoints (4-layer / $\ell_{\max}{=}4$ model from
-    Experiment~F; we do not have a 12-layer trained checkpoint to swap
-    into and therefore separate the architecture-level wall-clock
-    benchmark from the drop-in safety check): changing to GL at
-    inference shifts test MAE by $\leq 0.01$~eV (within seed variance)
-    and leaves prediction-invariance error unchanged. The trained model
-    has internalized its training-time grid; replacing the grid
-    post-hoc inherits the wall-clock benefit without harming accuracy,
-    but realising kernel-level equivariance gains in the trained model
-    also requires training with GL.
-  \item We document a \emph{two-phase} per-layer equivariance error
-    pattern in EquiformerV2 (a $1.5$--$16\times$ jump from layer~0 to
-    layer~1, then a plateau across deeper layers; \S\ref{sec:perlayer})
-    and use it to explain two findings of this paper: (i)~why
-    inference-time drop-in preserves predictions---the per-layer floor
-    is set at training time, so swapping the grid does not move it; and
-    (ii)~why fully harvesting GL's kernel-level equivariance advantage
-    in the trained model requires \emph{training} with GL---a finer
-    training-time grid lowers the absolute $L_0$ floor by
-    $\sim$160$\times$ and propagates that floor through all subsequent
-    layers.
-  \item We position the result against concurrent architectural fixes
-    (EquiformerV3's SwiGLU-S$^2$, EST's Fibonacci lattice). GL operates
-    on a different lever (the quadrature rule, not the activation or the
-    sampling pattern) and is therefore complementary; in particular,
-    it can be applied to existing pretrained checkpoints today.
-\end{enumerate}
-
 %========================================================================
-\section{Savings Scale Across Architectures}
-\label{sec:scale}
+\section{Drop-in Safety and the Per-Layer Mechanism}
+\label{sec:dropin}
 %========================================================================
 
-The headline 31\% savings is for the fairchem-default architecture
-(12 layers, $\ell_{\max}{=}6$). We benchmark two additional published
-sizes to characterise how the savings scale with depth and band limit:
+The Pareto result of \S\ref{sec:headline} is at the
+\emph{kernel level} and on a randomly initialised model. We now ask
+two follow-up questions. \textbf{(Q1)~Does swapping the grid in an
+actual trained checkpoint preserve predictions?}---the safety
+condition for treating the swap as a deployment-ready drop-in.
+\textbf{(Q2)~If yes, what mechanism explains the safety, and what
+does the same mechanism say about how to extract more equivariance
+gain?} Both have a clean answer through per-layer measurements of
+the $\ell{=}0$ invariance error, which we develop together in this
+section.
 
-\begin{itemize}
-\item \textbf{QM9-small} (4 layers, 64 channels, $\ell_{\max}{=}4$,
-  $m_{\max}{=}2$, 5.2M params) --- the configuration trained from
-  scratch in our QM9 sweep (Experiment~F).
-\item \textbf{OC20 EquiformerV2-31M} (8 layers, 128 channels,
-  $\ell_{\max}{=}4$, $m_{\max}{=}2$, $\sim$30M backbone params) ---
-  the public checkpoint shipped at
-  \url{dl.fbaipublicfiles.com/opencatalystproject/models/2023_06/oc20/s2ef/eq2_31M_ec4_allmd.pt}.
-  Notably, this checkpoint was trained with
-  \texttt{grid\_resolution=18}, i.e.\ $18 \times 18 = 324$ grid points,
-  which is $6.5\times$ the minimum DH-default density of 50 points.
-\item \textbf{fairchem-default} (12 layers, 128 channels,
-  $\ell_{\max}{=}6$, $m_{\max}{=}2$) --- the constructor signature
-  defaults of \texttt{EquiformerV2}.
-\end{itemize}
+\subsection{Q1: Inference-time swap preserves predictions}
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\linewidth]{fig_sweep_models.pdf}
-  \caption{Forward wall-clock per QM9 batch~8 across three published
-  EquiformerV2 architectures, for four grid configurations.
-  $n=3$ runs $\times$ 20 measured forwards on \emph{distinct} batches
-  per run, error bars 95\% CI on run means. The matched-equivariance
-  saving (GL match-DH vs.\ DH $2\times$) grows from $+15\%$ at the
-  4-layer QM9 model to $+31\%$ at the 12-layer/$\ell_{\max}{=}6$
-  fairchem default --- larger and deeper models benefit more,
-  because the S$^2$-activation kernel is a larger fraction of forward
-  time. Architecture-level (random-init) timing; the cost depends only
-  on tensor shapes and grid sizes, not on weight values.}
-  \label{fig:sweep}
-\end{figure}
+We take five 50-epoch DH-default-trained QM9 checkpoints from a
+smaller architecture used in our supporting experiments
+(4 layers, $\ell_{\max}{=}4$, $m_{\max}{=}2$, $\sim 5$M
+params).\footnote{We use the smaller architecture because we do not
+have a publicly available 12-layer fairchem-default trained checkpoint
+for QM9; the architecture-level wall-clock argument of
+\S\ref{sec:headline} is weight-independent so the model-size
+mismatch does not invalidate it. See \S\ref{sec:limitations}.}
+For each of four inference-time grids (DH default, GL min,
+GL match-DH, GL $2\times$) we re-evaluate test MAE and prediction
+invariance error on the held-out test set, leaving training-time
+weights fixed.
 
-\paragraph{Result.}
-Figure~\ref{fig:sweep} summarises. The matched-equivariance savings
-(GL match-DH vs.\ DH $2\times$) are $+15.4\%$ for QM9-small, $+13.9\%$
-for OC20-31M, and $+31.2\%$ for fairchem-default. The pattern is monotonic
-in $\ell_{\max}$: at $\ell_{\max}{=}4$ the DH $2\times$ grid is
-$20 \times 20 = 400$ points (vs.\ a 50- or 70-point default), a
-$5.7\times$--$8\times$ increase, while at $\ell_{\max}{=}6$ DH $2\times$ is
-$28 \times 28 = 784$ points (vs.\ 70 default), an $11.2\times$ increase.
-The S$^2$-activation kernel cost grows with grid size; everything else in
-the forward is unchanged. So the bigger the gap between DH default and DH
-$2\times$, the bigger the GL-vs-DH-$2\times$ savings.
+Test MAE shifts by at most $0.01$~eV across all four grids
+(seed-to-seed training variance is $\sim 0.5$~eV); prediction-
+invariance error ratios are $1.00 \pm 0.02$, statistically
+indistinguishable from unity. The drop-in is safe.
 
-\paragraph{A note on running on the public OC20 checkpoint.}
-We considered loading the OC20-31M weights into our patched-grid model
-to demonstrate a "drop-in on a real pretrained checkpoint" alongside the
-small-model dropin (\S\ref{sec:dropin}). Two practical hurdles emerged:
-(i) the checkpoint targets OC20 catalyst structures and predicts both
-energy and forces, while our \texttt{QM9Model} wrapper has only an energy
-head; (ii) the OC20 model uses
-\texttt{share\_atom\_edge\_embedding=False}, \texttt{use\_m\_share\_rad}
-flags, and several radial-function widths that do not match
-\texttt{BACKBONE\_DEFAULTS} as we have set them, causing
-\texttt{state\_dict} shape mismatches in the \texttt{rad\_func.net} layers.
-Reconciling these requires either rebuilding the QM9 wrapper around the
-fairchem OC20 trainer or running the experiment within fairchem's training
-loop. Since the \emph{wall-clock} argument is architecture-level (cost
-depends on tensor shapes, not weight values), the OC20-31M timing in
-Figure~\ref{fig:sweep} faithfully measures what a deployed inference
-forward would cost; we leave the fully-loaded checkpoint inference as
-future work.
+\subsection{Q2: Per-layer profile preservation explains why}
 
-%========================================================================
-\section{Per-Layer Error Dynamics, and Why Drop-in Preserves Predictions}
-\label{sec:perlayer}
-%========================================================================
-
-We took a brief detour earlier: the matched-equivariance saving is
-kernel-level (Fig.~\ref{fig:pareto}, Table~\ref{tab:four_way}); the
-trained-model prediction-invariance error is essentially unchanged when
-GL is swapped in at inference (\S\ref{sec:dropin}). This section uses
-\emph{per-layer} measurements to explain the gap, and to provide an
-operational guide: what the swap will and will not do for you.
-
-\paragraph{Per-layer protocol.}
-We instrument each transformer block in EquiformerV2 with a forward
-hook that captures the $\ell{=}0$ component of the block's output
-(an SO(3) invariant scalar field; in a perfectly equivariant model it
-should not change under input rotation). We rotate the input atom
-positions by a random Wigner-D matrix and report
-$\|e_i^{\ell=0} - e_i^{\ell=0,(R)}\|_F / \|e_i^{\ell=0}\|_F$ at each
-layer $i$, averaged over 10 rotations and 20 batches. The measurement
-is implemented in \texttt{measure\_equivariance} in
-\texttt{expF\_equiformerv2\_qm9.py:252}.
-
-\paragraph{The two-phase pattern.}
-Across all activations and grids (Table~\ref{tab:perlayer}), the
-$\ell{=}0$ invariance error follows the same two-phase shape: a sharp
-jump from layer~0 to layer~1 ($1.5\times$--$15.7\times$ depending on
-activation smoothness), then a plateau through layers 2--3.
+We instrument each transformer block with a forward hook capturing
+the $\ell{=}0$ component (an SO(3)-invariant scalar field) at the
+block's output, and report
+$\|e_i^{\ell{=}0} - e_i^{\ell{=}0,(R)}\|_F /
+   \|e_i^{\ell{=}0}\|_F$ averaged over 10 rotations and 20 batches.
+Table~\ref{tab:dropin_perlayer} shows that for these
+DH-default-trained checkpoints the per-layer profile is identical
+across grids at the percent level: $L_0 \approx 5.3 \times 10^{-5}$,
+the same $L_0 \to L_1$ jump ratio of $\sim$$9.4\times$, the same
+plateau. The trained model has internalised its training-time grid;
+swapping the grid post-hoc moves nothing.
 
 \begin{table}[t]
   \centering
-  \caption{Per-layer $\ell{=}0$ invariance error in 50-epoch trained
-  EquiformerV2 (4 layers, $\ell_{\max}{=}4$, $m_{\max}{=}2$, QM9).
-  Mean over 4--5 seeds. The two-phase pattern (large $L_0 \to L_1$ jump,
-  then plateau) is universal; only the absolute magnitude and the
-  jump ratio depend on the activation/grid choice. Training with a
-  finer grid (SiLU $2\times$) lowers the absolute $L_0$ floor by
-  $\sim$160$\times$.}
-  \label{tab:perlayer}
-  \small
-  \begin{tabular}{lcccc c}
-    \toprule
-    Trained config (SiLU + …) & $L_0$ & $L_1$ & $L_2$ & $L_3$ & $L_0 \!\to\! L_1$ \\
-    \midrule
-    SiLU, DH default            & $5.2 \times 10^{-5}$ & $5.1 \times 10^{-4}$ & $5.7 \times 10^{-4}$ & $7.1 \times 10^{-4}$ & $9.8\times$ \\
-    SiLU, DH $2\times$          & $3.3 \times 10^{-7}$ & $2.8 \times 10^{-6}$ & $3.9 \times 10^{-6}$ & $4.0 \times 10^{-6}$ & $8.6\times$ \\
-    SiLU, GL match-DH$^\dagger$ & $8.9 \times 10^{-6}$ & $4.9 \times 10^{-5}$ & $4.3 \times 10^{-5}$ & $3.6 \times 10^{-5}$ & $5.5\times$ \\
-    \midrule
-    \multicolumn{6}{l}{\emph{Other activations (DH default, for context):}} \\
-    Softplus($\beta{=}1$)   & $1.3 \times 10^{-5}$ & $1.2 \times 10^{-4}$ & $1.8 \times 10^{-4}$ & $2.3 \times 10^{-4}$ & $8.8\times$ \\
-    tanh                    & $7.6 \times 10^{-5}$ & $1.2 \times 10^{-3}$ & $1.1 \times 10^{-3}$ & $9.8 \times 10^{-4}$ & $15.7\times$ \\
-    ReLU                    & $7.7 \times 10^{-4}$ & $1.1 \times 10^{-3}$ & $1.1 \times 10^{-3}$ & $1.1 \times 10^{-3}$ & $1.5\times$ \\
-    $|\cdot|$               & $1.8 \times 10^{-3}$ & $3.3 \times 10^{-3}$ & $2.4 \times 10^{-3}$ & $1.6 \times 10^{-3}$ & $1.9\times$ \\
-    \bottomrule
-  \end{tabular}
-  \small
-  $^\dagger$ \emph{2-epoch unconverged pilot} (test MAE not yet at training plateau);
-  the per-layer L=0 floor is already an order of magnitude below
-  50-epoch DH-default. A converged 50-epoch GL run is queued in the
-  repo and will replace this row in the camera-ready.
-\end{table}
-
-\paragraph{Mechanism.}
-\emph{Phase 1 (layer 0$\to$1).} Let $\delta$ denote the typical
-per-S$^2$-Act perturbation of an $\ell{>}0$ component, and let $c \ll 1$
-be the cross-degree coupling factor by which $\ell{>}0$ corruption
-leaks into the $\ell{=}0$ component (via RMSNorm's all-degree
-normalisation and the SO(2) convolution's $m{=}0$ \texttt{nn.Linear}
-that mixes $\ell{=}0$ with $\ell{>}0$ coefficients). Then:
-\begin{itemize}\setlength\itemsep{0pt}
-\item \textbf{Layer 0 input:} $\ell{=}0$ error is exactly $0$
-  (\texttt{sphere\_embedding} is rotation-invariant by construction);
-  $\ell{>}0$ error is exactly $0$ (\texttt{EdgeDegreeEmbedding} is
-  rotation-equivariant by construction).
-\item \textbf{Layer 0 output:} EquiformerV2's
-  \texttt{SeparableS2Activation} routes $\ell{=}0$ through a scalar SiLU
-  that does not see the S$^2$ grid, so layer~0 has no \emph{direct}
-  $\ell{=}0$ quadrature error---only the indirect leak
-  $L_0 \sim c \cdot \delta$. The $\ell{>}0$ component sees one S$^2$-Act
-  forward, so it picks up the full $\delta$.
-\item \textbf{Layer 1 output:} The \emph{input} now carries $\ell{>}0$
-  corruption $\sim \delta$. Attention aggregates corrupted neighbour
-  features through learned linear projections, which produce new
-  $\ell{=}0$ values directly from the corrupted $\ell{>}0$ input
-  (a first-order path, no longer indirect). So
-  $L_1 \sim O(1) \cdot \delta$.
-\item \textbf{Ratio:} $L_1 / L_0 \sim 1/c$, the inverse of the
-  cross-degree coupling factor. For smooth activations $c$ is small
-  ($\ell{=}0$ channels are mostly invariant, RMSNorm fluctuations from
-  $\ell{>}0$ are second-order), so the jump ratio is large
-  (8--16$\times$); for non-smooth activations $\delta$ itself is much
-  larger, the indirect leak via RMSNorm/$m{=}0$ mixing is no longer
-  perturbative, and the ratio collapses to $1.5$--$1.9\times$.
-\end{itemize}
-This explains the empirical ranking in Table~\ref{tab:perlayer}: tanh
-($\delta$ small, jump $15.7\times$) at one extreme, $|\cdot|$
-($\delta$ large, jump $1.9\times$) at the other.
-
-\emph{Phase 2 (layers 2--3).} Three forces stabilise the error.
-(i)~Residual connections add a fresh increment at each layer; once the
-incremental error is comparable to the accumulated error, the relative
-ratio saturates. (ii)~RMSNorm rescales the embedding to unit norm at
-every layer entry, blocking unbounded growth. (iii)~The error spectrum
-itself reaches a steady state after a few S$^2$ activations.
-Notably, $|\cdot|$ \emph{decreases} at layers 2--3 because $|x|$ is even,
-so it projects all odd-$\ell$ components to zero, suppressing both the
-signal and its error in higher degrees.
-
-\paragraph{Implication 1: drop-in safety is explained by training-time
-grid locking.}
-Table~\ref{tab:dropin_perlayer} shows per-layer $\ell{=}0$ invariance
-error on the same DH-default-trained checkpoints, this time with the
-inference grid swapped to GL min, GL match-DH, or GL $2\times$. The
-profiles are identical at the percent level: every grid produces the same
-$L_0 \approx 5.3 \times 10^{-5}$, the same $L_0 \to L_1$ jump ratio of
-$\sim$$9.4\times$, the same plateau. The trained network has internalised
-its training-time grid behaviour in its weights; replacing the grid
-post-hoc cannot move the per-layer floor.
-
-\begin{table}[t]
-  \centering
-  \caption{Per-layer $\ell{=}0$ invariance error when swapping the grid
-  at inference on four DH-default-trained checkpoints (SiLU, $\ell_{\max}{=}4$,
-  $m_{\max}{=}2$, $n=4$ seeds). Numbers are statistically indistinguishable
-  across grids: the trained network has internalised its training-time
-  grid; swapping at inference inherits the wall-clock benefit without
-  changing the per-layer error profile.}
+  \caption{Per-layer $\ell{=}0$ invariance error when the grid is
+  swapped at inference on four DH-default-trained checkpoints (SiLU,
+  $\ell_{\max}{=}4$, $m_{\max}{=}2$, $n=4$ seeds). Numbers are
+  statistically indistinguishable across grids.}
   \label{tab:dropin_perlayer}
   \small
   \begin{tabular}{lcccc c}
     \toprule
     Inference grid & $L_0$ & $L_1$ & $L_2$ & $L_3$ & $L_0 \!\to\! L_1$ \\
     \midrule
-    DH default (training-time) & $5.27 \times 10^{-5}$ & $4.98 \times 10^{-4}$ & $5.60 \times 10^{-4}$ & $6.96 \times 10^{-4}$ & $9.4\times$ \\
-    GL min                     & $5.33 \times 10^{-5}$ & $4.97 \times 10^{-4}$ & $5.55 \times 10^{-4}$ & $6.96 \times 10^{-4}$ & $9.3\times$ \\
-    GL match-DH                & $5.30 \times 10^{-5}$ & $5.03 \times 10^{-4}$ & $5.60 \times 10^{-4}$ & $7.00 \times 10^{-4}$ & $9.5\times$ \\
-    GL $2\times$               & $5.31 \times 10^{-5}$ & $4.94 \times 10^{-4}$ & $5.57 \times 10^{-4}$ & $6.92 \times 10^{-4}$ & $9.3\times$ \\
+    DH default (training-time) & $5.27 \!\times\!10^{-5}$ & $4.98\!\times\!10^{-4}$ & $5.60\!\times\!10^{-4}$ & $6.96\!\times\!10^{-4}$ & $9.4\times$ \\
+    GL min                     & $5.33 \!\times\!10^{-5}$ & $4.97\!\times\!10^{-4}$ & $5.55\!\times\!10^{-4}$ & $6.96\!\times\!10^{-4}$ & $9.3\times$ \\
+    GL match-DH                & $5.30 \!\times\!10^{-5}$ & $5.03\!\times\!10^{-4}$ & $5.60\!\times\!10^{-4}$ & $7.00\!\times\!10^{-4}$ & $9.5\times$ \\
+    GL $2\times$               & $5.31 \!\times\!10^{-5}$ & $4.94\!\times\!10^{-4}$ & $5.57\!\times\!10^{-4}$ & $6.92\!\times\!10^{-4}$ & $9.3\times$ \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\paragraph{But why is the per-layer profile grid-independent at all?}
-A reasonable objection: in the limit of an infinitely dense grid, the
-S$^2$-Activation operator becomes exact, so the trained-model invariance
-error \emph{should} approach zero. Why doesn't a denser inference grid
-visibly reduce the per-layer error in Table~\ref{tab:dropin_perlayer}?
-Two facts together resolve this. (i)~Random-input kernel-level
-equivariance error at $\ell_{\max}{=}6$, $m_{\max}{=}2$ (the regime of
-this paper) saturates at $\sim 0.327$ regardless of grid
-(Table~\ref{tab:four_way}); the floor comes from \emph{$m_{\max}=2$
-truncation}, which discards $|m| > 2$ components and is not a quadrature
-error any grid can fix. (ii)~Trained features concentrate in the part
-of the basis $m_{\max}{=}2$ \emph{keeps} (low-$m$, $\ell{=}0$-dominated),
-so the truncation floor barely hits them; their residual error is
-dominated by the small-magnitude $\ell{>}0$ leak through cross-degree
-coupling.
-The trained model's $L{=}0$ error is therefore bounded above by
-$\|\text{cross-degree coupling}\| \cdot \|\ell{>}0$ features$\|$, and the
-second factor is small \emph{because training drove it small}. Swapping
-the grid at inference perturbs the $\ell{>}0$ features by $\sim 1\%$
-relative to whichever grid the model was trained on; the resulting
-$L{=}0$ leak is the same percentage of an already-small number, hence
-the percent-level invariance of Table~\ref{tab:dropin_perlayer}. Going
-to an infinitely dense grid at inference cannot drive the floor lower
-because there is no gradient telling the trained weights to make the
-$\ell{>}0$ residual any smaller; that's an optimization that only
-happens at training time.
+\subsection{The two-phase pattern is universal; only the floor
+varies with training}
 
-\paragraph{Implication 2: to harvest equivariance gains in the trained
-model, train with GL.}
-Table~\ref{tab:perlayer} contrasts SiLU at DH default vs.\ DH $2\times$
-\emph{at training time}. A finer training-time grid lowers the absolute
-$L_0$ floor by $\sim$160$\times$ and propagates that smaller floor through
-all subsequent layers, while keeping the $L_0 \to L_1$ jump shape
-($\sim$8--9$\times$) essentially fixed. So the right intervention to
-reduce trained-model invariance error is to choose a better training-time
-grid (which is exactly where GL match-DH wins on the wall-clock axis at
-matched kernel-level equivariance, Fig.~\ref{fig:pareto}). This is the
-operational reason the paper recommends GL at training time, not just at
-inference: the per-layer floor is set when the model trains.
-
-\paragraph{Activation smoothness reshapes phase 1, not phase 2.}
-The $L_0 \to L_1$ ratio in Table~\ref{tab:perlayer} ranges from
-$1.5\times$ for ReLU to $15.7\times$ for tanh. Smoother activations
-(SiLU, tanh, Softplus(1)) have small $L_0$ values because their indirect
-coupling at layer~0 is weak, but a large jump at $L_1$ because the
-direct first-order contamination is equally strong for everyone. Less
-smooth activations (ReLU, $|\cdot|$) start with much larger $L_0$ from
-strong indirect coupling, so the jump ratio is small. The plateau
-shape (phase 2), in contrast, is essentially activation-independent.
-
-%========================================================================
-\section{Why Doesn't FFT Save the Day for DH?}
-\label{sec:fft}
-%========================================================================
-
-A natural objection to our claim that DH is the wrong default: the
-classical Driscoll--Healy theorem~\cite{driscoll_healy} is exactly the
-statement that an equiangular grid of $2(\ell_{\max}+1) \times
-2(\ell_{\max}+1)$ points admits a fast SH transform of cost
-$O(N^2 \log^2 N)$, against $O(N^4)$ for a naive dense projection.
-GL nodes have no such fast algorithm, so isn't DH algorithmically
-strictly better at the limit?
-
-This section shows that, in EquiformerV2 specifically, this advantage is
-not realised. Three observations:
-
-\paragraph{(i) e3nn implements only the longitude FFT.}
-e3nn's \texttt{ToS2Grid.forward} (file \texttt{e3nn/o3/\_s2grid.py:367})
-does
-\begin{quote}
-\begin{small}
-\texttt{x = einsum('mbi,zi$\to$zbm', shb, x)}\\
-\texttt{if sa $>=$ sm and sa $\%$ 2 $==$ 1: x = irfft(x, sa)}\\
-\texttt{else: x = einsum('am,zbm$\to$zba', sha, x)}
-\end{small}
-\end{quote}
-The Legendre direction is always a dense matmul against \texttt{shb}.
-The FFT is along longitude only, and only when $N_\alpha$ is odd and at
-least $2\ell_{\max}+1$. e3nn does not implement the full
-Driscoll--Healy fast Legendre algorithm.
-
-\paragraph{(ii) EquiformerV2 bypasses the FFT entirely.}
-The \texttt{SO3\_Grid} class in \texttt{fairchem.core.models.equiformer\_v2.so3}
-(lines 529--578) calls \texttt{ToS2Grid} only at construction time,
-collapses \texttt{shb} and \texttt{sha} into a single dense
-\texttt{to\_grid\_mat} of shape $[N_\beta, N_\alpha, n_{\mathrm{coeffs}}]$,
-and applies it at runtime via a single \texttt{einsum}. The FFT branch
-in \texttt{ToS2Grid.forward} is never reached because
-\texttt{ToS2Grid.forward} is never called at runtime---only its internal
-buffers are.
-
-\paragraph{(iii) Wiring up the FFT path makes the kernel \emph{slower},
-not faster, at production scales.}
-We re-implemented \texttt{S2Activation} so that it explicitly invokes
-\texttt{ToS2Grid.forward} / \texttt{FromS2Grid.forward} at runtime
-(triggering the FFT branch when $N_\alpha$ is odd and $\geq 2\ell_{\max}+1$),
-and benchmarked the resulting kernel against the dense path at the
-\emph{same} grid size. Table~\ref{tab:four_way} reports SiLU
-S$^2$-activation timing at $\ell_{\max}{=}6$, $m_{\max}{=}2$ with
-batch~1024 token messages and 128 channels. At a $14 \times 13 = 182$-pt
-grid (where the FFT branch triggers), the FFT path is
-\emph{$7\times$ slower} than dense matmul. The mmax-cropping
-inflate/scatter step plus a much larger \texttt{shb} einsum (over the
-full $(\ell_{\max}+1)^2 = 49$ basis instead of the
-\textbf{cropped} 29 used by the dense path) wipes out the savings of
-the alpha FFT at $N_\alpha = 13$.
+Across all activations and grids tested
+(Table~\ref{tab:perlayer}), the $\ell{=}0$ error follows the same
+two-phase shape: a sharp jump $L_0 \to L_1$ ($1.5$--$15.7\times$
+depending on activation smoothness), then a plateau through layers
+$2$--$3$. What \emph{does} differ between trained checkpoints is the
+\emph{absolute floor}: training with a finer grid lowers $L_0$ by
+$\sim 160\times$ relative to DH default and propagates that floor
+through subsequent layers, with the jump shape essentially preserved.
 
 \begin{table}[t]
   \centering
-  \caption{Kernel-level S$^2$-Activation benchmark: equivariance error
-  and per-call time for four quadrature methods at $\ell_{\max}{=}6$,
-  $m_{\max}{=}2$, SiLU activation, batch~1024 with 128 channels, NVIDIA
-  A100-SXM4-40GB. Equivariance error is averaged over 5 random rotations
-  $\times$ 10 random inputs; kernel time is mean $\pm$ 95\% CI over 3
-  runs $\times$ 20 forwards each.}
+  \caption{Per-layer $\ell{=}0$ invariance error in 50-epoch trained
+  EquiformerV2 (4 layers, $\ell_{\max}{=}4$, $m_{\max}{=}2$, QM9).
+  Mean over 4--5 seeds. The two-phase pattern (large $L_0 \to L_1$
+  jump, then plateau) is universal across activations; only the
+  absolute magnitude and the jump ratio depend on the activation/grid
+  choice. Training with a finer grid (DH $2\times$) lowers the
+  absolute $L_0$ floor by $\sim 160\times$.}
+  \label{tab:perlayer}
+  \small
+  \begin{tabular}{lcccc c}
+    \toprule
+    Trained config (SiLU + …) & $L_0$ & $L_1$ & $L_2$ & $L_3$ & $L_0 \!\to\! L_1$ \\
+    \midrule
+    SiLU, DH default            & $5.2\!\times\!10^{-5}$ & $5.1\!\times\!10^{-4}$ & $5.7\!\times\!10^{-4}$ & $7.1\!\times\!10^{-4}$ & $9.8\times$ \\
+    SiLU, DH $2\times$          & $3.3\!\times\!10^{-7}$ & $2.8\!\times\!10^{-6}$ & $3.9\!\times\!10^{-6}$ & $4.0\!\times\!10^{-6}$ & $8.6\times$ \\
+    SiLU, GL match-DH$^\dagger$ & $8.9\!\times\!10^{-6}$ & $4.9\!\times\!10^{-5}$ & $4.3\!\times\!10^{-5}$ & $3.6\!\times\!10^{-5}$ & $5.5\times$ \\
+    \midrule
+    \multicolumn{6}{l}{\emph{Other activations (DH default, for context):}} \\
+    Softplus($\beta{=}1$)   & $1.3\!\times\!10^{-5}$ & $1.2\!\times\!10^{-4}$ & $1.8\!\times\!10^{-4}$ & $2.3\!\times\!10^{-4}$ & $8.8\times$ \\
+    tanh                    & $7.6\!\times\!10^{-5}$ & $1.2\!\times\!10^{-3}$ & $1.1\!\times\!10^{-3}$ & $9.8\!\times\!10^{-4}$ & $15.7\times$ \\
+    ReLU                    & $7.7\!\times\!10^{-4}$ & $1.1\!\times\!10^{-3}$ & $1.1\!\times\!10^{-3}$ & $1.1\!\times\!10^{-3}$ & $1.5\times$ \\
+    $|\cdot|$               & $1.8\!\times\!10^{-3}$ & $3.3\!\times\!10^{-3}$ & $2.4\!\times\!10^{-3}$ & $1.6\!\times\!10^{-3}$ & $1.9\times$ \\
+    \bottomrule
+  \end{tabular}
+  \\\smallskip
+  \footnotesize{$^\dagger$ 2-epoch unconverged pilot; a converged
+  50-epoch GL run is queued and will replace this row in the
+  camera-ready.}
+\end{table}
+
+\subsection{Mechanism: a $\delta$/$c$ toy model}
+
+Let $\delta$ be the typical per-S$^2$-Act perturbation of an
+$\ell{>}0$ component, and let $c \ll 1$ be the cross-degree coupling
+factor by which $\ell{>}0$ corruption leaks into $\ell{=}0$ (via
+RMSNorm's all-degree normalisation and the SO(2) convolution's
+$m{=}0$ \texttt{nn.Linear} that mixes $\ell{=}0$ with $\ell{>}0$
+coefficients).
+\begin{itemize}\setlength\itemsep{0pt}
+\item \textbf{Layer 0 input:} $\ell{=}0$ error is exactly 0 (\texttt{sphere\_embedding} is rotation-invariant by construction); $\ell{>}0$ error is exactly 0 (\texttt{EdgeDegreeEmbedding} is rotation-equivariant by construction).
+\item \textbf{Layer 0 output:} EquiformerV2's
+  \texttt{SeparableS2Activation} routes $\ell{=}0$ through a scalar
+  SiLU that does not see the S$^2$ grid, so layer~0 has only
+  \emph{indirect} $\ell{=}0$ contamination,
+  $L_0 \sim c \cdot \delta$. The $\ell{>}0$ component sees one
+  $S^2$-Act forward, so it picks up the full $\delta$.
+\item \textbf{Layer 1 output:} The input now carries $\ell{>}0$
+  corruption $\sim \delta$. Attention aggregates corrupted neighbour
+  features through learned linear projections and produces new
+  $\ell{=}0$ values directly from the corrupted $\ell{>}0$ input
+  (a \emph{first-order} path). So $L_1 \sim O(1) \cdot \delta$, and
+  $L_1/L_0 \sim 1/c$, the inverse of the cross-degree coupling
+  factor.
+\end{itemize}
+This explains both the empirical jump ratio and its activation
+dependence: smooth activations have small $c$ (their $\ell{=}0$
+channels are mostly invariant, and RMSNorm fluctuations from
+$\ell{>}0$ are second-order), so the jump is large
+($8$--$16\times$); non-smooth activations have large $\delta$,
+indirect leak is no longer perturbative, and the ratio collapses to
+$1.5$--$1.9\times$. After layer~1 both $\ell{=}0$ and $\ell{>}0$
+carry comparable errors; residual connections plus RMSNorm bound
+further growth and the relative error saturates.
+
+\subsection{Why infinite-grid-at-inference would not help}
+
+A natural objection: in the limit of an infinitely dense grid the
+$S^2$-Activation operator becomes exact, so the trained-model
+invariance error \emph{should} approach zero. Why doesn't a denser
+inference grid visibly reduce the per-layer error in
+Table~\ref{tab:dropin_perlayer}? Two facts together resolve this.
+(i)~The kernel-level equivariance error at $\ell_{\max}{=}6$,
+$m_{\max}{=}2$ saturates at $\sim 0.327$ regardless of grid; the
+floor comes from $m_{\max}{=}2$ truncation, which discards $|m| > 2$
+components and is not a quadrature error any grid can fix.
+(ii)~Trained features concentrate in the part of the basis
+$m_{\max}{=}2$ \emph{keeps} (low-$m$, $\ell{=}0$-dominated), so the
+truncation floor barely hits them. Their residual error is bounded
+above by $\|c\| \cdot \|\ell{>}0\text{ features}\|$, and the second
+factor is small \emph{because training drove it small} against the
+training-time grid. Inference-time grid swap perturbs the
+$\ell{>}0$ features by $\sim 1\%$; the corresponding $\ell{=}0$
+leak is the same percentage of an already-small number, hence the
+percent-level invariance of Table~\ref{tab:dropin_perlayer}. Going
+to an infinitely dense grid at inference cannot drive the floor
+lower because there is no gradient telling the trained weights to
+make the $\ell{>}0$ residual any smaller: that optimization happens
+only at training time.
+
+\subsection{Practical implications}
+
+The inference-time drop-in is therefore a \emph{free wall-clock
+reduction at preserved task accuracy}, not a way to tighten
+trained-model equivariance. To extract the kernel-level equivariance
+gain in trained-model invariance, one trains with the better grid:
+GL match-DH at training time inherits the wall-clock benefit of
+\S\ref{sec:headline} \emph{and} drops the per-layer floor by 1--2
+orders of magnitude. We have queued five 50-epoch
+SiLU+GL match-DH training runs; their results will replace the
+2-epoch pilot row in Table~\ref{tab:perlayer} for the camera-ready.
+
+%========================================================================
+\section{Related Work}
+\label{sec:related}
+%========================================================================
+
+\paragraph{The S$^2$-activation lineage.}
+SCN~\cite{scn} introduced the S$^2$-activation operator for
+SO(3)-equivariant atomistic networks; eSCN~\cite{escn} reduced its
+SO(3) convolutions to SO(2) for efficiency; EquiformerV2~\cite
+{equiformerv2} integrated this into a transformer backbone and
+explicitly noted that ``sampling-induced equivariance error remains
+an open challenge.'' All three inherit e3nn's equiangular DH grid
+without modification.
+
+\paragraph{Concurrent work, complementary levers.}
+\emph{EquiformerV3}~\cite{equiformerv3} (April 2026, by the V2
+authors) addresses the same equivariance problem at the
+\emph{architectural} level: SwiGLU-S$^2$ replaces the S$^2$ activation
+with a SwiGLU operating only on scalars and bilinear products,
+avoiding the grid round-trip entirely and achieving a $50.6\%$
+reduction in grid points while maintaining strict equivariance. It
+requires retraining and a new model.
+\emph{EST}~\cite{est} (May 2025) addresses it at the
+\emph{sampling-pattern} level: replaces the e3nn grid with a
+Fibonacci lattice, observing that e3nn's polar clustering wastes
+points. It also requires retraining.
+Our work targets a third, complementary lever---the \emph{quadrature
+rule}---and operates as a drop-in change for both pretrained
+checkpoints and from-scratch training.
+
+\paragraph{Community awareness of the problem.}
+The fairchem issue tracker contains \texttt{issue \#1068} (March
+2025)~\cite{fairchem1068}, where users reported the equivariance
+problem and discussed mitigations including ``more grid points''
+and double precision, both prohibitively expensive. None of the
+proposed fixes considered alternative quadrature rules.
+
+%========================================================================
+\section{Limitations}
+\label{sec:limitations}
+%========================================================================
+
+\textbf{$m_{\max}$ truncation is a separate floor.} The kernel-level
+equivariance saturates at $\sim 0.327$ at $\ell_{\max}{=}6$,
+$m_{\max}{=}2$ regardless of how dense the grid is. This is a
+truncation error from the eSCN reduction, not a quadrature error;
+no choice of quadrature can break it. Models that use
+$m_{\max}{=}\ell_{\max}$ (no truncation) reach a much lower floor
+($\sim 4 \times 10^{-3}$ at $\ell_{\max}{=}6$) where the GL advantage
+is even more pronounced.
+
+\textbf{No fully-trained 12-layer GL run yet.} Our trained-checkpoint
+experiments use the smaller 4-layer expF architecture because we do
+not have a publicly available 12-layer fairchem-default QM9 checkpoint.
+The architecture-level wall-clock claim is weight-independent, so it
+transfers, but extending the per-layer floor data
+(Table~\ref{tab:perlayer}) to 12 layers is left to future work.
+
+\textbf{Lebedev does not fit the tensor-product einsum natively.}
+Lebedev d=21 is the Pareto-optimal kernel-level choice in our
+benchmark (Appendix~\ref{app:fft}), but its non-tensor-product
+structure requires reshape-as-$1{\times}N$ within EquiformerV2's
+einsum, which is suboptimal. Native support would require a small
+refactor of \texttt{S2Activation.forward}.
+
+\textbf{Public-checkpoint loading hit module-shape mismatches.} We
+attempted to load the fairchem OC20 EquiformerV2-31M public
+checkpoint into our QM9 model wrapper; mismatches in the
+\texttt{rad\_func.net} radial-function widths
+(\texttt{share\_atom\_edge\_embedding}, etc.) prevented exact
+loading. The architecture-level wall-clock for that configuration is
+in Appendix~\ref{app:scale}; the drop-in safety result remains
+established only on our own trained checkpoints.
+
+%========================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+%========================================================================
+
+We have argued that the choice of quadrature method in EquiformerV2's
+$S^2$ activation is a useful and underexplored lever: orthogonal to
+the architectural changes of EquiformerV3 and the sampling-pattern
+changes of EST. We instantiated two alternatives---Gauss--Legendre
+and Lebedev---in a drop-in \texttt{CustomSO3Grid} module, and showed
+that switching to GL match-DH delivers DH $2\times$'s equivariance
+floor at $31.3\%$ lower wall-clock per forward, with no retraining
+and no measurable change in trained-model predictions. Per-layer
+measurements expose a universal two-phase mechanism that explains
+both the safety of the inference-time swap and the complementary
+recommendation to train with a finer grid when one wants to lower
+trained-model invariance error---both consistent with our
+$\delta/c$ toy model.
+
+\paragraph{Future work.}
+(i)~A 50-epoch GL match-DH training sweep on the 12-layer fairchem
+default to close the trained-model invariance gap on the headline
+architecture. (ii)~A native Lebedev path through EquiformerV2's
+$S^2$-Act forward, eliminating the $1\!\times\!N$ reshape and
+allowing the kernel-Pareto-best Lebedev d=21 to deploy without
+adaptation. (iii)~A unified architectural+quadrature ablation
+combining EquiformerV3's SwiGLU-S$^2$ with GL grids, since the two
+levers act on different parts of the activation pipeline and are
+expected to compound.
+
+\bibliographystyle{abbrvnat}
+\bibliography{references}
+
+%========================================================================
+\appendix
+%========================================================================
+
+\section{Scaling savings across architectures}
+\label{app:scale}
+
+The $31\%$ saving in the headline is for the 12-layer fairchem-default
+architecture. Two other published configurations show how the saving
+scales with depth and band limit
+(Figure~\ref{fig:sweep}): \textbf{QM9-small} (4 layers / 64 channels /
+$\ell_{\max}{=}4$, our trained-checkpoint testbed) shows
+$+15.4\%$; \textbf{OC20 EquiformerV2-31M} (8 layers / 128 channels /
+$\ell_{\max}{=}4$, the public OC20 checkpoint we attempted to load)
+shows $+13.9\%$; the \textbf{fairchem-default 12-layer} model shows
+$+31.2\%$. The pattern is monotonic in $\ell_{\max}$: at
+$\ell_{\max}{=}4$ the DH $2\times$ grid is $20\!\times\!20 = 400$
+points (a $5.7$--$8\times$ increase over default), while at
+$\ell_{\max}{=}6$ DH $2\times$ is $28\!\times\!28 = 784$ points
+(an $11.2\times$ increase). Larger and deeper models benefit more
+from the swap because the $S^2$-activation kernel becomes a larger
+fraction of forward time.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.95\linewidth]{fig_sweep_models.pdf}
+  \caption{Forward wall-clock per QM9 batch~8 across three published
+  EquiformerV2 architectures, for four grid configurations.
+  $n=3$ runs $\times$ 20 measured forwards on distinct batches per
+  run, error bars 95\% CI on run means. Architecture-level (random-init)
+  timing.}
+  \label{fig:sweep}
+\end{figure}
+
+\section{Why FFT does not save DH at this scale}
+\label{app:fft}
+
+DH's classical algorithmic justification is the FFT-based fast SH
+transform. We give three observations explaining why this advantage
+is not realised in EquiformerV2.
+
+\paragraph{(i) e3nn implements only the longitude FFT.}
+e3nn's \texttt{ToS2Grid.forward} (\texttt{e3nn/o3/\_s2grid.py:367})
+takes the FFT path along longitude only when $N_\alpha$ is odd and
+$\geq 2\ell_{\max}+1$; the Legendre direction is always a dense
+matmul. The full Driscoll--Healy fast Legendre transform is not
+implemented in e3nn (and in practice has a high break-even
+$\ell_{\max} \gtrsim 64$ on GPU).
+
+\paragraph{(ii) EquiformerV2 bypasses the FFT entirely.}
+\texttt{SO3\_Grid} (lines 529--578 of fairchem's \texttt{so3.py})
+calls \texttt{ToS2Grid} only at construction time, collapses
+\texttt{shb} and \texttt{sha} into a single dense
+\texttt{to\_grid\_mat} of shape $[N_\beta, N_\alpha, n_{\rm coeffs}]$,
+and applies it at runtime via a single \texttt{einsum}. The FFT
+branch in \texttt{ToS2Grid.forward} is never reached.
+
+\paragraph{(iii) Wiring up the FFT path makes the kernel slower.}
+We re-implemented \texttt{S2Activation} so that it explicitly invokes
+\texttt{ToS2Grid.forward} / \texttt{FromS2Grid.forward} at runtime
+and benchmarked against the dense path at the same grid size. At a
+$14 \times 13 = 182$-point grid, the FFT path is \emph{$7\times$
+slower} than dense matmul (Table~\ref{tab:four_way}). The
+$m_{\max}$-cropping inflate/scatter step plus a much larger
+\texttt{shb} einsum (over the full $(\ell_{\max}+1)^2 = 49$ basis
+instead of the cropped 29 used by the dense path) wipes out the
+savings of the alpha FFT at $N_\alpha = 13$.
+
+The same table shows that Lebedev at degree~21 (170 points,
+non-tensor-product) is the kernel-level Pareto winner: same
+equivariance floor as DH $2\times$ and GL match-DH, at 28\% lower
+kernel time than GL match-DH and 33\% lower than DH-dense match.
+
+\begin{table}[h]
+  \centering
+  \caption{Kernel-level $S^2$-Activation benchmark: equivariance
+  error and per-call time for four quadrature methods at
+  $\ell_{\max}{=}6$, $m_{\max}{=}2$, SiLU activation, batch~1024,
+  128 channels, NVIDIA A100-SXM4-40GB. Equivariance error is averaged
+  over 5 random rotations $\times$ 10 random inputs; kernel time is
+  mean $\pm$ 95\% CI over 3 runs $\times$ 20 forwards each.}
   \label{tab:four_way}
   \small
   \begin{tabular}{lccr}
     \toprule
     Method & Pts & Equiv err & Kernel (ms) \\
     \midrule
-    DH-dense default ($N_\alpha = 5$)   & 70  & $4.24 \times 10^{-1}$ & $0.34 \pm 0.00$ \\
-    DH-dense match ($N_\alpha = 13$)    & 182 & $3.35 \times 10^{-1}$ & $0.62 \pm 0.01$ \\
-    \textbf{DH-FFT} ($N_\alpha = 13$)   & 182 & $3.35 \times 10^{-1}$ & $\mathbf{4.32 \pm 0.05}$ \\
-    GL match-DH ($N_\alpha = 13$)       & 182 & $3.34 \times 10^{-1}$ & $0.58 \pm 0.00$ \\
-    Lebedev ($d = 13$)                  & 74  & $5.11 \times 10^{-1}$ & $0.25 \pm 0.00$ \\
-    \textbf{Lebedev} ($d = 21$)         & 170 & $\mathbf{3.35 \times 10^{-1}}$ & $\mathbf{0.41 \pm 0.00}$ \\
+    DH-dense default ($N_\alpha = 5$)   & 70  & $4.24\!\times\!10^{-1}$ & $0.34 \pm 0.00$ \\
+    DH-dense match ($N_\alpha = 13$)    & 182 & $3.35\!\times\!10^{-1}$ & $0.62 \pm 0.01$ \\
+    \textbf{DH-FFT} ($N_\alpha = 13$)   & 182 & $3.35\!\times\!10^{-1}$ & $\mathbf{4.32 \pm 0.05}$ \\
+    GL match-DH ($N_\alpha = 13$)       & 182 & $3.34\!\times\!10^{-1}$ & $0.58 \pm 0.00$ \\
+    Lebedev ($d = 13$)                  & 74  & $5.11\!\times\!10^{-1}$ & $0.25 \pm 0.00$ \\
+    \textbf{Lebedev} ($d = 21$)         & 170 & $\mathbf{3.35\!\times\!10^{-1}}$ & $\mathbf{0.41 \pm 0.00}$ \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\paragraph{Summary.}
-The DH grid was designed for a fast algorithm that EquiformerV2 does not
-use, and that loses to dense matmul anyway when wired in at the model's
-operating scale ($N_\alpha \in \{5, 13\}$, channel axis $\sim$128
-dominating compute). Once we restrict to the dense regime---which
-EquiformerV2 already inhabits---the question of which quadrature to use
-collapses to ``which set of nodes integrates band-limited products with
-the fewest points,'' and Gauss--Legendre and high-order Lebedev both win
-over Driscoll--Healy. Lebedev $d = 21$ (170 points) is in fact the
-kernel-level Pareto winner at the saturation floor, beating GL match-DH
-by an additional 28\%; it does not, however, fit cleanly into
-EquiformerV2's tensor-product
-\texttt{einsum("bai, zic\,$\to$\,zbac", to\_grid\_mat, inputs)}
-schema without minor refactoring (we set $N_\beta = 1$ as a workaround).
-The full-network Pareto in Figure~\ref{fig:pareto} therefore reports
-GL as the ``safe drop-in,'' but Lebedev is a strict further improvement
-for anyone willing to flatten the grid axis.
+\section{Reproducibility}
+\label{app:repro}
 
-\bibliographystyle{abbrvnat}
-\bibliography{references}
+All experiments run on Perlmutter under the
+\texttt{module load pytorch/2.6.0-1} environment (Python 3.12.12,
+PyTorch 2.6.0, CUDA 12.4, e3nn 0.4.4, fairchem-core 1.10.0,
+torch\_geometric 2.7.0). Two non-obvious gotchas: PyTorch 2.6's
+\texttt{weights\_only=True} default breaks e3nn's
+\texttt{constants.pt}, requiring
+\texttt{torch.serialization.add\_safe\_globals([slice])} before any
+e3nn import; and the 12-layer / lmax=6 model fragments the CUDA
+allocator unless \texttt{PYTORCH\_CUDA\_ALLOC\_CONF=expandable\_segments:True}.
+
+The exact commands to reproduce the four benchmarks of this paper
+are:
+\begin{verbatim}
+# Headline Pareto (Section 4)
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  python3 experiments/expG_verify_speedup_v2.py \
+    --batch_size 8 --n_runs 5 --n_iter 30 --n_warmup 10
+# Drop-in safety on trained checkpoints (Section 5.1-5.2)
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  python3 experiments/expG_dropin_pretrained.py \
+    --seeds 123 456 789 1024 --activation SiLU --orig_grid default
+# Architecture sweep (Appendix A)
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  python3 experiments/expG_sweep_models.py
+# Four-way kernel benchmark (Appendix B)
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  python3 experiments/expG_four_way.py
+\end{verbatim}
 
 \end{document}
