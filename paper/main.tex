@@ -144,13 +144,18 @@ drop-in for inference cost. \emph{Fourth}, a per-layer analysis
 exposes a universal $1.5$--$16\times$ jump at layer~0$\to$1 followed
 by a plateau, captured by a $\delta$/$c$ toy model in which $\delta$
 is the per-$S^2$-Act $\ell{>}0$ perturbation and $c$ is the
-cross-degree coupling factor; the shape is set by the architecture
-and the absolute floor by the training-time grid (training with
-DH~$2\times$ lowers the floor by $\sim 160\times$). This decomposition
-explains both why an inference-time swap preserves predictions (the
-profile is invariant under it) and why extracting a trained-model
-equivariance gain requires using the better grid \emph{at training
-time}.
+cross-degree coupling factor. The shape is set by the architecture;
+the \emph{absolute floor} is set by the training-time grid's
+\emph{point count}, not its method---training with GL match-DH (182
+points) gives a profile statistically indistinguishable from DH
+default (70 points), while training with the much denser DH~$2\times$
+(784 points) lowers the floor by $\sim 160\times$. This explains why
+an inference-time swap preserves predictions (the profile does not
+move under it) and why a trained-model equivariance gain requires
+training with substantially more grid points than the e3nn default;
+GL gives the same wall-clock as DH default at any matched grid
+budget, so a denser GL grid (e.g.\ GL $2\times$) is the natural
+intervention.
 
 %========================================================================
 \section{Background}
@@ -562,28 +567,37 @@ Across all activations and grids tested
 two-phase shape: a sharp jump $L_0 \to L_1$ ($1.5$--$15.7\times$
 depending on activation smoothness), then a plateau through layers
 $2$--$3$. What \emph{does} differ between trained checkpoints is the
-\emph{absolute floor}: training with a finer grid lowers $L_0$ by
-$\sim 160\times$ relative to DH default and propagates that floor
-through subsequent layers, with the jump shape essentially preserved.
+\emph{absolute floor}, and---perhaps surprisingly---the dominant
+control over the floor is the \emph{number of grid points}, not the
+quadrature method. Training SiLU with GL match-DH (182 points,
+$n=5$ converged seeds) gives $L_0 = 4.4 \times 10^{-5}$, statistically
+indistinguishable from DH default's $L_0 = 5.2 \times 10^{-5}$ (70
+points). Only DH~$2\times$ at 784 points---a $4\times$ increase
+over GL match-DH and an $11\times$ increase over DH default---drops
+$L_0$ by $\sim 160\times$ to $3.3 \times 10^{-7}$, and propagates
+that lower floor through subsequent layers.
 
 \begin{table}[t]
   \centering
   \caption{Per-layer $\ell{=}0$ invariance error in 50-epoch trained
   EquiformerV2 (4 layers, $\ell_{\max}{=}4$, $m_{\max}{=}2$, QM9).
   Mean over 4--5 seeds. The two-phase pattern (large $L_0 \to L_1$
-  jump, then plateau) is universal across activations; only the
-  absolute magnitude and the jump ratio depend on the activation/grid
-  choice. Training with a finer grid (DH $2\times$) lowers the
-  absolute $L_0$ floor by $\sim 160\times$.}
+  jump, then plateau) is universal across activations and grids; only
+  the absolute magnitude and the jump ratio depend on the
+  activation/grid choice. Notably, GL match-DH at training time
+  produces a per-layer profile statistically indistinguishable from
+  DH default---the grid-point count, not the quadrature method, is
+  what sets the floor; DH $2\times$ (with $4\times$ more points than
+  GL match-DH) is needed to drop the floor by $\sim 160\times$.}
   \label{tab:perlayer}
   \small
   \begin{tabular}{lcccc c}
     \toprule
     Trained config (SiLU + …) & $L_0$ & $L_1$ & $L_2$ & $L_3$ & $L_0 \!\to\! L_1$ \\
     \midrule
-    SiLU, DH default            & $5.2\!\times\!10^{-5}$ & $5.1\!\times\!10^{-4}$ & $5.7\!\times\!10^{-4}$ & $7.1\!\times\!10^{-4}$ & $9.8\times$ \\
-    SiLU, DH $2\times$          & $3.3\!\times\!10^{-7}$ & $2.8\!\times\!10^{-6}$ & $3.9\!\times\!10^{-6}$ & $4.0\!\times\!10^{-6}$ & $8.6\times$ \\
-    SiLU, GL match-DH$^\dagger$ & $8.9\!\times\!10^{-6}$ & $4.9\!\times\!10^{-5}$ & $4.3\!\times\!10^{-5}$ & $3.6\!\times\!10^{-5}$ & $5.5\times$ \\
+    SiLU, DH default ($N$=70)        & $5.2\!\times\!10^{-5}$ & $5.1\!\times\!10^{-4}$ & $5.7\!\times\!10^{-4}$ & $7.1\!\times\!10^{-4}$ & $9.8\times$ \\
+    SiLU, GL match-DH ($N$=182)      & $4.4\!\times\!10^{-5}$ & $5.4\!\times\!10^{-4}$ & $8.0\!\times\!10^{-4}$ & $9.8\!\times\!10^{-4}$ & $12.3\times$ \\
+    SiLU, DH $2\times$ ($N$=784)     & $3.3\!\times\!10^{-7}$ & $2.8\!\times\!10^{-6}$ & $3.9\!\times\!10^{-6}$ & $4.0\!\times\!10^{-6}$ & $8.6\times$ \\
     \midrule
     \multicolumn{6}{l}{\emph{Other activations (DH default, for context):}} \\
     Softplus($\beta{=}1$)   & $1.3\!\times\!10^{-5}$ & $1.2\!\times\!10^{-4}$ & $1.8\!\times\!10^{-4}$ & $2.3\!\times\!10^{-4}$ & $8.8\times$ \\
@@ -592,10 +606,6 @@ through subsequent layers, with the jump shape essentially preserved.
     $|\cdot|$               & $1.8\!\times\!10^{-3}$ & $3.3\!\times\!10^{-3}$ & $2.4\!\times\!10^{-3}$ & $1.6\!\times\!10^{-3}$ & $1.9\times$ \\
     \bottomrule
   \end{tabular}
-  \\\smallskip
-  \footnotesize{$^\dagger$ 2-epoch unconverged pilot; a converged
-  50-epoch GL run is queued and will replace this row in the
-  camera-ready.}
 \end{table}
 
 \subsection{Mechanism: a $\delta$/$c$ toy model}
@@ -661,13 +671,20 @@ only at training time.
 
 The inference-time drop-in is therefore a \emph{free wall-clock
 reduction at preserved task accuracy}, not a way to tighten
-trained-model equivariance. To extract the kernel-level equivariance
-gain in trained-model invariance, one trains with the better grid:
-GL match-DH at training time inherits the wall-clock benefit of
-\S\ref{sec:headline} \emph{and} drops the per-layer floor by 1--2
-orders of magnitude. We have queued five 50-epoch
-SiLU+GL match-DH training runs; their results will replace the
-2-epoch pilot row in Table~\ref{tab:perlayer} for the camera-ready.
+trained-model equivariance. The harder question---how to actually
+lower the trained-model invariance floor---has a more nuanced answer
+than ``train with the better quadrature.''
+Empirically (Table~\ref{tab:perlayer}, $n=5$ converged seeds), GL
+match-DH at training time gives a per-layer profile statistically
+indistinguishable from DH default; the GL/DH method choice does
+\emph{not} by itself shift the trained-model floor. The intervention
+that does shift the floor is increasing the \emph{grid-point count}
+substantially, as DH~$2\times$ illustrates with its $11\times$ point
+density. The natural prescription combining both observations is to
+train with a denser GL grid (e.g.~GL~$2\times$ at 392 points), which
+matches DH~$2\times$ on kernel-level equivariance at lower wall-clock
+than DH~$2\times$ (\S\ref{sec:headline}); we leave this combined
+training run for future work.
 
 %========================================================================
 \section{Related Work}
