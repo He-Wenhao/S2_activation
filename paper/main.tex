@@ -237,26 +237,31 @@ scale ($e_{\rm kernel} \sim 10^{-1}$ vs.\ $e_{\rm pred} \sim 10^{-5}$
 in our setting); we always state explicitly which one each number
 reports.
 
-The choice of quadrature in \eqref{eq:s2act} reduces to choosing
-$\{(\theta_i, \phi_i, w_i)\}_{i=1}^N$. We consider three options
-(Figure~\ref{fig:quadratures}). \emph{Driscoll--Healy} uses an
-equiangular tensor-product grid $\theta_j = (j+\tfrac{1}{2})\pi/N_\theta$,
-$\phi_k = 2\pi k/N_\phi$, with $N_\theta = 2(\ell_{\max}+1)$ latitude
-points and $N_\phi \geq 2\ell_{\max}+1$ longitude points; the $\phi$
-direction admits an FFT and the $\theta$ direction admits a fast
-``cosine transform,'' giving an $O(\ell_{\max}^2 \log^2 \ell_{\max})$
-fast SH transform~\cite{driscoll_healy}. \emph{Gauss--Legendre} uses
-$\theta_j$ at the roots of the Legendre polynomial
-$P_{N_\theta}(\cos\theta_j) = 0$ with companion weights, requiring
-only $N_\theta = \ell_{\max}+1$ latitude points (a factor of two
-fewer than DH); $\phi$ is again uniform but no fast algorithm exists
-for the Legendre direction~\cite{shtools}. \emph{Lebedev} rules give a
-non-tensor-product set of $N$ nodes on the sphere designed to be exact
-for all spherical polynomials up to a given degree with as few points
-as possible: degree~21 with 170 points is the smallest rule exact at
-$\ell_{\max}{=}6$~\cite{lebedev_quadrature}, far below DH's
-$2(\ell_{\max}+1)\times(2\ell_{\max}+1) = 14 \times 13 = 182$ points
-or DH~$2\times$'s $28 \times 28 = 784$ points.
+The choice of quadrature in \eqref{eq:s2act} amounts to choosing
+$\{(\theta_i, \phi_i, w_i)\}_{i=1}^N$, and is the central design
+question this paper addresses (Section~\ref{sec:method}).
+
+%========================================================================
+\section{Method: \texttt{CustomSO3Grid}}
+\label{sec:method}
+%========================================================================
+
+We consider three quadrature families on $S^2$ (Figure~\ref{fig:quadratures}).
+\emph{Driscoll--Healy} uses an equiangular tensor-product grid
+$\theta_j = (j+\tfrac{1}{2})\pi/N_\theta$, $\phi_k = 2\pi k/N_\phi$,
+with $N_\theta = 2(\ell_{\max}+1)$ latitude points and
+$N_\phi \geq 2\ell_{\max}+1$ longitude points~\cite{driscoll_healy}.
+\emph{Gauss--Legendre} places $\theta_j$ at the roots of the Legendre
+polynomial $P_{N_\theta}(\cos\theta_j) = 0$ with companion weights,
+which is exact for band-limited products of degree $\leq 2\ell_{\max}$
+using only $N_\theta = \ell_{\max}+1$ latitude points---a factor of
+two fewer than DH~\cite{shtools}; $\phi$ is again uniform.
+\emph{Lebedev} rules~\cite{lebedev_quadrature} give a non-tensor-product
+set of $N$ nodes on the sphere designed to be exact for all spherical
+polynomials up to a given degree with as few points as possible:
+degree~21 with 170 points is the smallest rule exact at
+$\ell_{\max}{=}6$, far below DH's $14 \times 13 = 182$ points or
+DH~$2\times$'s $28 \times 28 = 784$ points.
 
 \begin{figure}[t]
   \centering
@@ -271,33 +276,12 @@ or DH~$2\times$'s $28 \times 28 = 784$ points.
   \label{fig:quadratures}
 \end{figure}
 
-The reason Driscoll--Healy became e3nn's default is its FFT-based fast
-SH transform: at $\ell_{\max} \gtrsim 64$ this gives a decisive
-$O(\ell_{\max}^2 \log^2 \ell_{\max})$ vs.\ the dense $O(\ell_{\max}^4)$.
-EquiformerV2 operates at $\ell_{\max} \in \{4, 6, 8\}$ where this
-asymptotic advantage has not yet emerged on a GPU; and as already
-noted, its \texttt{SO3\_Grid} precomputes the SH projection as a
-single dense matrix and never invokes the FFT path that e3nn does
-provide for some configurations (Appendix~\ref{app:fft} quantifies
-this, showing that even when the FFT path is wired up explicitly it
-is $7 \times$ slower than the dense path at our problem size). Once
-we are in the dense-matmul regime, DH's design advantage is
-unrealised, and the question becomes purely numerical: which nodes
-integrate band-limited products with the fewest points. The answer
-points to GL and Lebedev.
-
-%========================================================================
-\section{Method: \texttt{CustomSO3Grid}}
-\label{sec:method}
-%========================================================================
-
-We implement \texttt{CustomSO3Grid}, a drop-in replacement for
-fairchem's \texttt{SO3\_Grid} that supports the three quadrature
-families introduced above (DH, Gauss--Legendre, Lebedev). It exposes
-the same \texttt{get\_to\_grid\_mat} / \texttt{get\_from\_grid\_mat}
-interface as fairchem's original, with matrices of identical shape
-signature; a \texttt{patch\_so3\_grid()} helper replaces every grid
-in \texttt{model.backbone.SO3\_grid} after model construction, so
+We expose all three through a drop-in module \texttt{CustomSO3Grid}
+that replaces fairchem's \texttt{SO3\_Grid}. It uses the same
+\texttt{get\_to\_grid\_mat} / \texttt{get\_from\_grid\_mat}
+interface, with matrices of identical shape signature; a
+\texttt{patch\_so3\_grid()} helper swaps every grid in
+\texttt{model.backbone.SO3\_grid} after model construction, so
 existing pretrained weights remain valid.
 
 \subsection{Constructing the to/from-grid matrices}
@@ -807,9 +791,29 @@ fraction of forward time.
 \section{Why FFT does not save DH at this scale}
 \label{app:fft}
 
-DH's classical algorithmic justification is the FFT-based fast SH
-transform. We give three observations explaining why this advantage
-is not realised in EquiformerV2.
+A natural objection to swapping DH for GL is that the Driscoll--Healy
+grid was designed precisely to enable an FFT-based fast SH
+transform---an algorithmic advantage GL forfeits, since GL nodes do
+not admit a fast algorithm. This appendix shows that the advantage
+is theoretical only at EquiformerV2's scale, and that even when
+explicitly wired in is slower than dense matmul.
+
+DH's classical justification is its FFT-based fast SH transform: at
+$\ell_{\max} \gtrsim 64$ this gives a decisive
+$O(\ell_{\max}^2 \log^2 \ell_{\max})$ vs.\ the dense
+$O(\ell_{\max}^4)$. EquiformerV2 operates at
+$\ell_{\max} \in \{4, 6, 8\}$ where this asymptotic advantage has not
+yet emerged on a GPU; and as we discuss below, its
+\texttt{SO3\_Grid} precomputes the SH projection as a single dense
+matrix and never invokes the FFT path that e3nn does provide for
+some configurations. Once we are in the dense-matmul regime, DH's
+design advantage is unrealised, and the question becomes purely
+numerical: which nodes integrate band-limited products with the
+fewest points. The answer points to GL and Lebedev, as
+\S\ref{sec:headline} makes precise.
+
+The remainder of this appendix gives three observations explaining
+why DH's FFT advantage is not realised in EquiformerV2.
 
 \paragraph{(i) e3nn implements only the longitude FFT.}
 e3nn's \texttt{ToS2Grid.forward} (\texttt{e3nn/o3/\_s2grid.py:367})
