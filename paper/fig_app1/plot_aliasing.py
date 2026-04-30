@@ -35,8 +35,11 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib import colors
+from matplotlib import cm, colors
 import numpy as np
+
+ELEV = 22
+AZIM = 35
 
 
 def _silu(x):
@@ -123,19 +126,108 @@ def _regular_grid(n_theta=181, n_phi=361):
     return TT, PP
 
 
+def _view_direction(elev_deg=ELEV, azim_deg=AZIM):
+    elev = np.deg2rad(elev_deg)
+    azim = np.deg2rad(azim_deg)
+    v = np.array([
+        np.cos(elev) * np.cos(azim),
+        np.cos(elev) * np.sin(azim),
+        np.sin(elev),
+    ])
+    return v / np.linalg.norm(v)
+
+
+VIEW = _view_direction()
+
+
+def _sph_to_xyz(theta, phi):
+    x = np.sin(theta) * np.cos(phi)
+    y = np.sin(theta) * np.sin(phi)
+    z = np.cos(theta)
+    return np.stack([x, y, z], axis=-1)
+
+
+def _is_front(xyz, cutoff=-0.05):
+    flat = xyz.reshape(-1, 3)
+    visible = flat @ VIEW > cutoff
+    return visible.reshape(xyz.shape[:-1])
+
+
+def _plot_sphere_line_segments(ax, pts, visible, **plot_kwargs):
+    pts = np.asarray(pts)
+    visible = np.asarray(visible, dtype=bool)
+
+    if not np.any(visible):
+        return
+
+    idx = np.where(visible)[0]
+    breaks = np.where(np.diff(idx) > 1)[0] + 1
+    groups = np.split(idx, breaks)
+
+    if len(groups) > 1 and groups[0][0] == 0 and groups[-1][-1] == len(visible) - 1:
+        merged = np.concatenate([groups[-1], groups[0]])
+        groups = [merged] + groups[1:-1]
+
+    for group in groups:
+        if len(group) < 2:
+            continue
+        seg = pts[group]
+        ax.plot(seg[:, 0], seg[:, 1], seg[:, 2], **plot_kwargs)
+
+
+def _plot_front_sphere_grid(ax, n_lat=17, n_lon=36, cutoff=-0.05):
+    theta_vals = np.linspace(0.08 * np.pi, 0.92 * np.pi, n_lat)
+    phi_curve = np.linspace(0.0, 2 * np.pi, 360)
+
+    for theta in theta_vals:
+        theta_curve = np.full_like(phi_curve, theta)
+        pts = _sph_to_xyz(theta_curve, phi_curve)
+        visible = _is_front(pts, cutoff=cutoff)
+        _plot_sphere_line_segments(ax, pts, visible, linewidth=0.25, alpha=0.18)
+
+    phi_vals = np.linspace(0.0, 2 * np.pi, n_lon, endpoint=False)
+    theta_curve = np.linspace(0.0, np.pi, 360)
+
+    for phi in phi_vals:
+        phi_curve = np.full_like(theta_curve, phi)
+        pts = _sph_to_xyz(theta_curve, phi_curve)
+        visible = _is_front(pts, cutoff=cutoff)
+        _plot_sphere_line_segments(ax, pts, visible, linewidth=0.25, alpha=0.18)
+
+
+def _style_sphere(ax, title, elev=ELEV, azim=AZIM):
+    ax.set_title(title, fontsize=10.5, pad=8)
+    ax.set_box_aspect([1, 1, 1])
+    ax.set_axis_off()
+    ax.view_init(elev=elev, azim=azim)
+    lim = 1.05
+    ax.set_xlim(-lim, lim)
+    ax.set_ylim(-lim, lim)
+    ax.set_zlim(-lim, lim)
+
+
 def _plot_sphere_heat(ax, values, title, panel_label, vlim):
-    lon = values["phi"] - np.pi
-    lat = (np.pi / 2.0) - values["theta"]
     norm = colors.TwoSlopeNorm(vmin=-vlim, vcenter=0.0, vmax=vlim)
-    mesh = ax.pcolormesh(lon, lat, values["field"], shading="auto",
-                         cmap="coolwarm", norm=norm)
-    ax.grid(True, color="#666666", alpha=0.25, linewidth=0.5)
-    ax.set_xticklabels([])
-    ax.set_yticklabels([])
-    ax.text(0.01, 1.06, panel_label, transform=ax.transAxes,
-            ha="left", va="bottom", fontsize=13, fontweight="bold")
-    ax.set_title(title, fontsize=10.5, pad=10)
-    return mesh
+    xyz = _sph_to_xyz(values["theta"], values["phi"])
+    x, y, z = xyz[..., 0], xyz[..., 1], xyz[..., 2]
+    facecolors = cm.get_cmap("coolwarm")(norm(values["field"]))
+
+    ax.plot_surface(
+        x, y, z,
+        rstride=1, cstride=1,
+        facecolors=facecolors,
+        linewidth=0.0,
+        antialiased=False,
+        shade=False,
+    )
+    _plot_front_sphere_grid(ax)
+    _style_sphere(ax, title)
+    ax.text2D(0.02, 0.98, panel_label, transform=ax.transAxes,
+              ha="left", va="top", fontsize=13, fontweight="bold")
+
+    sm = cm.ScalarMappable(norm=norm, cmap="coolwarm")
+    sm.set_array([])
+    return sm
 
 
 def _plot_coeffs(ax, c_disp, LMAX_DISPLAY, LMAX, ymax, title,
@@ -244,12 +336,12 @@ def main():
     ymax = yabs * 1.22
     vlim = max(np.abs(f_vis).max(), np.abs(sigma_vis).max())
 
-    fig = plt.figure(figsize=(12.5, 6.7))
-    gs = fig.add_gridspec(2, 2, width_ratios=[1.0, 2.15], hspace=0.5,
-                          wspace=0.22)
-    ax_heat_before = fig.add_subplot(gs[0, 0], projection="mollweide")
+    fig = plt.figure(figsize=(12.8, 6.7))
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.15, 2.05], hspace=0.44,
+                          wspace=0.18)
+    ax_heat_before = fig.add_subplot(gs[0, 0], projection="3d")
     ax_coeff_before = fig.add_subplot(gs[0, 1])
-    ax_heat_after = fig.add_subplot(gs[1, 0], projection="mollweide")
+    ax_heat_after = fig.add_subplot(gs[1, 0], projection="3d")
     ax_coeff_after = fig.add_subplot(gs[1, 1])
 
     mesh_before = _plot_sphere_heat(
@@ -279,12 +371,12 @@ def main():
 
     cbar_before = fig.colorbar(mesh_before, ax=ax_heat_before,
                                orientation="horizontal",
-                               fraction=0.08, pad=0.10)
+                               fraction=0.07, pad=0.02)
     cbar_before.ax.tick_params(labelsize=8)
     cbar_before.set_label("Field value", fontsize=9)
     cbar_after = fig.colorbar(mesh_after, ax=ax_heat_after,
                               orientation="horizontal",
-                              fraction=0.08, pad=0.10)
+                              fraction=0.07, pad=0.02)
     cbar_after.ax.tick_params(labelsize=8)
     cbar_after.set_label("Field value", fontsize=9)
 

@@ -79,7 +79,7 @@ def style_sphere(ax, title, elev=ELEV, azim=AZIM):
     ax.set_axis_off()
     ax.view_init(elev=elev, azim=azim)
 
-    lim = 1.18
+    lim = 1.05
     ax.set_xlim(-lim, lim)
     ax.set_ylim(-lim, lim)
     ax.set_zlim(-lim, lim)
@@ -315,24 +315,10 @@ def main():
     for idx, (title, xyz, weights) in enumerate(panels, start=1):
         ax = fig.add_subplot(1, 3, idx, projection="3d")
         plot_weight_disks_front_only(ax, xyz, weights, title)
-
-    fig.suptitle(
-        r"Surface-attached quadrature weight disks on $S^2$ for $\ell_{\max}=4$",
-        fontsize=14,
-    )
-
-    fig.text(
-        0.5,
-        0.02,
-        "Only front-side disks and front-side sphere grid are shown. "
-        "Disk area is proportional to quadrature weight. "
-        "Driscoll--Healy weights are schematic; Lebedev uses a "
-        "Fibonacci-sphere proxy.",
-        ha="center",
-        fontsize=9,
-    )
-
-    fig.tight_layout(rect=[0, 0.06, 1, 0.92])
+        ax.text2D(0.02, 0.98, f"({chr(ord('a') + idx - 1)})",
+                  transform=ax.transAxes, ha="left", va="top",
+                  fontsize=14, fontweight="bold")
+    fig.tight_layout()
 
     out_dir = Path(__file__).resolve().parent
     out_png = out_dir / "fig_quadratures.png"

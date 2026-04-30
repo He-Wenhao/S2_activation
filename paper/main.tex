@@ -16,7 +16,6 @@
 \usepackage{amssymb}
 \usepackage{amsthm}
 \usepackage{bm}
-\usepackage{subcaption}
 
 \newtheorem{proposition}{Proposition}
 
@@ -190,7 +189,7 @@ Y_{\ell' m'}(\theta_i, \phi_i)$ at every grid point, the application
 of $\sigma$ to each $f(\theta_i, \phi_i)$, and a backward
 projection that integrates against $w_i Y_{\ell m}(\theta_i, \phi_i)$.
 EquiformerV2's \texttt{S2Activation.forward} implements exactly this
-factorisation (Figure~\ref{fig:workflow}, top),
+factorisation (Figure~\ref{fig:workflow}(b)),
 with the two linear maps stored as dense buffers
 $\texttt{to\_grid\_mat}_{i, (\ell m)} = Y_{\ell m}(\theta_i, \phi_i)$
 and
@@ -208,8 +207,9 @@ integration: the exact integral
 $c'_{\ell m} = \int_{S^2} \sigma(f(\theta,\phi))\,Y_{\ell m}(\theta,
 \phi)\,d\Omega$ is replaced by the finite-quadrature sum in
 \eqref{eq:s2act}, and the gap between them is what breaks
-equivariance. The intuition is spectral
-(Figure~\ref{fig:workflow}, bottom): although $f$
+equivariance. The contrast is shown schematically in
+Figure~\ref{fig:workflow}(c): the exact final projection is replaced
+by a finite quadrature rule. The intuition is spectral: although $f$
 is band-limited at $\ell_{\max}$, the pointwise nonlinearity $\sigma$
 creates content at arbitrarily high degrees in $\sigma(f)$. An
 $N$-point grid can only faithfully integrate spherical polynomials up
@@ -224,41 +224,27 @@ integral is exactly equivariant for any $\sigma$.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{fig1/fig_workflow.pdf}\\[10pt]
-  \includegraphics[width=0.95\linewidth]{fig1/fig_aliasing.pdf}
-  \caption{The $S^2$-activation pipeline and the source of its
-    equivariance error. \emph{Top:} the four-stage operator
-    $\mathcal{A}_\sigma$ implemented in EquiformerV2's
-    \texttt{S2Activation.forward}: SH coefficients $c$ are projected
-    to grid values $f(\theta_i, \phi_i)$ (\emph{to-grid}), $\sigma$
-    is applied pointwise on $S^2$, and the result is integrated
-    against $w_i\,Y_{\ell m}$ to produce new SH coefficients $c'$
-    (\emph{from-grid}). Stages~1--3 are exact and equivariant; only
-    the final integration is approximated, and the gap between the
-    exact integral $\int_{S^2}\sigma(f)\,Y_{\ell m}\,d\Omega$ and the
-    finite-quadrature sum $\sum_i w_i\,\sigma(f(\theta_i, \phi_i))\,
-    Y_{\ell m}(\theta_i, \phi_i)$ is the sole source of
-    $S^2$-activation equivariance error
-    (Appendix~\ref{app:exact-equivariance}); three node families are
-    illustrated in Figure~\ref{fig:quadratures}.
-    Panel~(a): the exact continuous pipeline and its practical
-    quadrature approximation. Panels~(b)--(e): why an $N$-point grid
-    cannot make that integration exact. Panels~(b) and~(d) show the
-    spherical field values before and after pointwise $\sigma$.
-    Panels~(c) and~(e) show the corresponding signed
-    spherical-harmonic coefficients $c_{\ell m}$, enumerated along
-    the $x$-axis with one bar per $(\ell, m)$ pair (within each
-    $\ell$ group bars are arranged left-to-right in order
-    $m = -\ell, \ldots, +\ell$; groups are coloured by $\ell$).
-    Before pointwise $\sigma$, $f$ is band-limited, so
-    $c_{\ell m} \neq 0$ only at $\ell \leq \ell_{\max}$ and all bars
-    at $\ell > \ell_{\max}$ vanish. After pointwise $\sigma$,
-    $\sigma(f)$ has nonzero $c_{\ell m}$ at \emph{every} $\ell$; the
-    high-$\ell$ tail decays toward $\ell \to \infty$ but never
-    reaches zero. Only the green-shaded $\ell \leq \ell_{\max}$
-    region is kept by the network's truncation; a finite grid cannot
-    resolve the excised tail, which aliases back into the kept
-    coefficients in a rotation-dependent way.}
+  \includegraphics[width=\linewidth]{fig1/fig1_sph_act.pdf}
+  \caption{Where the $S^2$ activation sits in EquiformerV2 and where
+    its equivariance error enters.
+    \textbf{(a)} Each repeated EquiformerV2 block applies E3 message
+    passing, an E3 linear map, and then the spherical activation
+    before the final output head.
+    \textbf{(b)} Inside \texttt{S2Activation.forward}, irrep
+    coefficients are mapped to a function on the sphere by an inverse
+    SHT, a point-wise scalar nonlinearity is applied on $S^2$, and
+    the result is projected back to irreps by the forward SHT.
+    \textbf{(c)} The first two stages are exact and equivariant; the
+    only approximation is the final projection back to coefficients,
+    where the exact integral
+    $\int_{S^2} f'(\Omega)\,Y_{\ell m}(\Omega)\,d\Omega$ is replaced
+    by the finite-quadrature sum
+    $\sum_i w_i\,f'(\Omega_i)\,Y_{\ell m}(\Omega_i)$. That quadrature
+    gap is the sole source of $S^2$-activation equivariance error
+    (Appendix~\ref{app:exact-equivariance}). Swapping quadrature
+    therefore changes only the precomputed \texttt{to\_grid\_mat} and
+    \texttt{from\_grid\_mat} buffers; Figure~\ref{fig:quadratures}
+    shows three node families used in this paper.}
   \label{fig:workflow}
 \end{figure}
 
@@ -952,8 +938,8 @@ finite-sum analogue when $\{(\theta_i, \phi_i)\}$ is not a fixed
 point set of every $R \in \mathrm{SO}(3)$. Equivalently, a finite
 quadrature is exact only on a finite-dimensional polynomial subspace
 of $L^2(S^2)$, and $\sigma(f)$ generically leaves that subspace
-(Figure~\ref{fig:workflow}, bottom); the residual
-high-$\ell$ content aliases into the kept coefficients in a
+(after the point-wise nonlinearity); the residual high-$\ell$
+content aliases into the kept coefficients in a
 rotation-dependent way.
 
 %========================================================================
