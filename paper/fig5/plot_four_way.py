@@ -2,9 +2,8 @@
 Plot the kernel-level Pareto frontier for all four (six) quadrature methods.
 
 Reads results/expG_quadrature/four_way.json, writes
-  results/expG_quadrature/four_way.png
-  results/expG_quadrature/four_way.pdf
-  paper/figures/fig_four_way.{png,pdf}
+  paper/fig5/fig_four_way.png
+  paper/fig5/fig_four_way.pdf
 """
 
 import json
@@ -128,13 +127,13 @@ def main():
 
     fig.tight_layout()
 
-    for out in [Path("results/expG_quadrature/four_way.png"),
-                 Path("results/expG_quadrature/four_way.pdf"),
-                 Path("paper/figures/fig_four_way.png"),
-                 Path("paper/figures/fig_four_way.pdf")]:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(out, dpi=200)
-        print(f"Saved: {out}")
+    out_dir = Path(__file__).resolve().parent
+    out_png = out_dir / "fig_four_way.png"
+    out_pdf = out_dir / "fig_four_way.pdf"
+    fig.savefig(out_png, dpi=200)
+    fig.savefig(out_pdf)
+    print(f"Saved: {out_png}")
+    print(f"Saved: {out_pdf}")
 
 
 if __name__ == "__main__":

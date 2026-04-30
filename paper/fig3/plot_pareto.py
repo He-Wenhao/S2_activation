@@ -3,8 +3,8 @@ Plot the Pareto frontier: equivariance error vs wall-clock time per forward,
 for DH and GL quadratures at the OC20-scale EquiformerV2 config.
 
 Reads results/expG_quadrature/pareto.json and writes
-  results/expG_quadrature/pareto.png
-  results/expG_quadrature/pareto.pdf
+  paper/fig3/fig_pareto.png
+  paper/fig3/fig_pareto.pdf
 """
 
 import json
@@ -18,8 +18,9 @@ import numpy as np
 
 def main():
     src = Path("results/expG_quadrature/pareto.json")
-    out_png = Path("results/expG_quadrature/pareto.png")
-    out_pdf = Path("results/expG_quadrature/pareto.pdf")
+    out_dir = Path(__file__).resolve().parent
+    out_png = out_dir / "fig_pareto.png"
+    out_pdf = out_dir / "fig_pareto.pdf"
 
     with open(src) as f:
         data = json.load(f)

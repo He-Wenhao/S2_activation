@@ -86,13 +86,13 @@ def main():
     ))
 
     fig.tight_layout()
-    for out in [Path("results/expG_quadrature/sweep_models.png"),
-                 Path("results/expG_quadrature/sweep_models.pdf"),
-                 Path("paper/figures/fig_sweep_models.png"),
-                 Path("paper/figures/fig_sweep_models.pdf")]:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(out, dpi=200)
-        print(f"Saved: {out}")
+    out_dir = Path(__file__).resolve().parent
+    out_png = out_dir / "fig_sweep_models.png"
+    out_pdf = out_dir / "fig_sweep_models.pdf"
+    fig.savefig(out_png, dpi=200)
+    fig.savefig(out_pdf)
+    print(f"Saved: {out_png}")
+    print(f"Saved: {out_pdf}")
 
 
 if __name__ == "__main__":

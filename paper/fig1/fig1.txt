@@ -1,0 +1,4 @@
+1. sh coeff: {c_lm}{l,m}
+2. spherical function f(theta,phi) = sum_{lm} c_lm Y_lm (theta, phi)
+3. point-wise  sigma(f(theta,phi))
+4. new sh coeff: c_lm' = int_theta,phi d\Omega sigma(f(theta,phi))   \approx \sum_i w_i sigma(f(theta_i,phi_i)) = A_sigma(c_lm)

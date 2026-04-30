@@ -14,10 +14,11 @@
 \usepackage{xcolor}
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{amsthm}
 \usepackage{bm}
 \usepackage{subcaption}
 
-\graphicspath{{figures/}}
+\newtheorem{proposition}{Proposition}
 
 \title{Beyond Driscoll--Healy: Drop-in Quadrature Upgrades for EquiformerV2's
 $S^2$ Activation}
@@ -189,8 +190,8 @@ Y_{\ell' m'}(\theta_i, \phi_i)$ at every grid point, the application
 of $\sigma$ to each $f(\theta_i, \phi_i)$, and a backward
 projection that integrates against $w_i Y_{\ell m}(\theta_i, \phi_i)$.
 EquiformerV2's \texttt{S2Activation.forward} implements exactly this
-factorisation (Figure~\ref{fig:workflow}), with the two linear maps
-stored as dense buffers
+factorisation (Figure~\ref{fig:workflow}, top),
+with the two linear maps stored as dense buffers
 $\texttt{to\_grid\_mat}_{i, (\ell m)} = Y_{\ell m}(\theta_i, \phi_i)$
 and
 $\texttt{from\_grid\_mat}_{i, (\ell m)} = w_i \,
@@ -198,38 +199,85 @@ Y_{\ell m}(\theta_i, \phi_i)$. Because the buffers are precomputed
 once at model construction, replacing the grid amounts to replacing
 these two buffers; no other code in the network changes.
 
+The first three stages of \eqref{eq:s2act} (expansion in spherical
+harmonics, evaluation at grid points, pointwise $\sigma$) are exact,
+continuous operations on the underlying band-limited function
+$f(\theta, \phi)$ and commute with rotations of $f$. The
+\emph{only} step that introduces equivariance error is the final
+integration: the exact integral
+$c'_{\ell m} = \int_{S^2} \sigma(f(\theta,\phi))\,Y_{\ell m}(\theta,
+\phi)\,d\Omega$ is replaced by the finite-quadrature sum in
+\eqref{eq:s2act}, and the gap between them is what breaks
+equivariance. The intuition is spectral
+(Figure~\ref{fig:workflow}, bottom): although $f$
+is band-limited at $\ell_{\max}$, the pointwise nonlinearity $\sigma$
+creates content at arbitrarily high degrees in $\sigma(f)$. An
+$N$-point grid can only faithfully integrate spherical polynomials up
+to a band limit set by $N$; high-$\ell$ content of $\sigma(f)$
+aliases back into the kept $\ell \leq \ell_{\max}$ coefficients, and
+the aliased contribution depends on the orientation of the grid
+relative to $f$. Section~\ref{sec:method} chooses a quadrature whose
+band limit aligns with $\ell_{\max}$, and
+Appendix~\ref{app:exact-equivariance} formalises the limit:
+the operator obtained by replacing the quadrature sum with the exact
+integral is exactly equivariant for any $\sigma$.
+
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{fig_workflow.pdf}
-  \caption{The $S^2$ activation pipeline. SH coefficients $c$ are
-    projected to grid values $f(\theta_i, \phi_i)$ (the
-    \emph{to-grid} step), the scalar activation $\sigma$ is applied
-    pointwise on $S^2$, and the result is integrated against
-    $w_i\,Y_{\ell m}$ to produce new SH coefficients $c'$ (the
-    \emph{from-grid} step). Only the from-grid step weights the
-    values, and only it contributes quadrature error. Both
-    projections use the same set of quadrature nodes
-    $\{(\theta_i, \phi_i)\}$, illustrated for three families in
-    Figure~\ref{fig:quadratures}.}
+  \includegraphics[width=\linewidth]{fig1/fig_workflow.pdf}\\[10pt]
+  \includegraphics[width=0.95\linewidth]{fig1/fig_aliasing.pdf}
+  \caption{The $S^2$-activation pipeline and the source of its
+    equivariance error. \emph{Top:} the four-stage operator
+    $\mathcal{A}_\sigma$ implemented in EquiformerV2's
+    \texttt{S2Activation.forward}: SH coefficients $c$ are projected
+    to grid values $f(\theta_i, \phi_i)$ (\emph{to-grid}), $\sigma$
+    is applied pointwise on $S^2$, and the result is integrated
+    against $w_i\,Y_{\ell m}$ to produce new SH coefficients $c'$
+    (\emph{from-grid}). Stages~1--3 are exact and equivariant; only
+    the final integration is approximated, and the gap between the
+    exact integral $\int_{S^2}\sigma(f)\,Y_{\ell m}\,d\Omega$ and the
+    finite-quadrature sum $\sum_i w_i\,\sigma(f(\theta_i, \phi_i))\,
+    Y_{\ell m}(\theta_i, \phi_i)$ is the sole source of
+    $S^2$-activation equivariance error
+    (Appendix~\ref{app:exact-equivariance}); three node families are
+    illustrated in Figure~\ref{fig:quadratures}.
+    Panel~(a): the exact continuous pipeline and its practical
+    quadrature approximation. Panels~(b)--(e): why an $N$-point grid
+    cannot make that integration exact. Panels~(b) and~(d) show the
+    spherical field values before and after pointwise $\sigma$.
+    Panels~(c) and~(e) show the corresponding signed
+    spherical-harmonic coefficients $c_{\ell m}$, enumerated along
+    the $x$-axis with one bar per $(\ell, m)$ pair (within each
+    $\ell$ group bars are arranged left-to-right in order
+    $m = -\ell, \ldots, +\ell$; groups are coloured by $\ell$).
+    Before pointwise $\sigma$, $f$ is band-limited, so
+    $c_{\ell m} \neq 0$ only at $\ell \leq \ell_{\max}$ and all bars
+    at $\ell > \ell_{\max}$ vanish. After pointwise $\sigma$,
+    $\sigma(f)$ has nonzero $c_{\ell m}$ at \emph{every} $\ell$; the
+    high-$\ell$ tail decays toward $\ell \to \infty$ but never
+    reaches zero. Only the green-shaded $\ell \leq \ell_{\max}$
+    region is kept by the network's truncation; a finite grid cannot
+    resolve the excised tail, which aliases back into the kept
+    coefficients in a rotation-dependent way.}
   \label{fig:workflow}
 \end{figure}
 
 We will distinguish two equivariance metrics throughout. The first is
 the \emph{kernel-level} equivariance error of a single $S^2$
 activation, which we define as the expected relative residual under
-random rotations and random SH coefficients. Let $\widetilde{D}(R)$
+random rotations and random SH coefficients. Let $\mathcal{D}(R)$
 denote the Wigner-$D$ matrix associated with a rotation
 $R \in \mathrm{SO}(3)$ (acting on the SH-coefficient vector by
-$c \mapsto \widetilde{D}(R) c$):
+$c \mapsto \mathcal{D}(R) c$):
 \begin{equation}
   e_{\rm kernel}(\mathcal{A}_\sigma)
   \;=\;
   \mathop{\mathbb{E}}_{\substack{c \sim \mathcal{N}(0, I) \\
                                  R \sim \mathrm{Haar}(\mathrm{SO}(3))}}
   \!\left[\,
-  \frac{\bigl\| \mathcal{A}_\sigma\!\bigl(\widetilde{D}(R)\,c\bigr)
-              \;-\; \widetilde{D}(R)\, \mathcal{A}_\sigma(c) \bigr\|}
-       {\bigl\| \mathcal{A}_\sigma\!\bigl(\widetilde{D}(R)\,c\bigr) \bigr\|}
+  \frac{\bigl\| \mathcal{A}_\sigma\!\bigl(\mathcal{D}(R)\,c\bigr)
+              \;-\; \mathcal{D}(R)\, \mathcal{A}_\sigma(c) \bigr\|}
+       {\bigl\| \mathcal{A}_\sigma\!\bigl(\mathcal{D}(R)\,c\bigr) \bigr\|}
   \,\right].
   \label{eq:kerneleq}
 \end{equation}
@@ -242,7 +290,7 @@ of the full network's output $y$ on a molecular input $x$:
 \begin{equation}
   e_{\rm pred}
   \;=\;
-  \mathop{\mathbb{E}}_{\substack{x \sim \mathcal{D}_{\rm test} \\
+  \mathop{\mathbb{E}}_{\substack{x \sim \mathcal{X}_{\rm test} \\
                                  R \sim \mathrm{Haar}(\mathrm{SO}(3))}}
   \!\left[\,
   \frac{\bigl| y(x) - y(R \cdot x) \bigr|}
@@ -250,7 +298,7 @@ of the full network's output $y$ on a molecular input $x$:
   \,\right],
   \label{eq:predeq}
 \end{equation}
-where $\mathcal{D}_{\rm test}$ is the held-out test set and
+where $\mathcal{X}_{\rm test}$ is the held-out test set and
 $R \cdot x$ denotes the rotation of atom positions by $R$. This
 metric depends on the trained weights, the architecture, and
 \emph{every} $S^2$ activation in the network; we estimate it as an
@@ -288,7 +336,7 @@ DH~$2\times$'s $28 \times 28 = 784$ points.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{fig_quadratures.pdf}
+  \includegraphics[width=\linewidth]{fig2/fig_quadratures.pdf}
   \caption{Three quadrature node layouts on $S^2$ for
     $\ell_{\max}=4$. Driscoll--Healy (left) uses an equiangular
     tensor-product grid with $2(\ell_{\max}+1)$ latitude rings, twice
@@ -417,7 +465,7 @@ matched-pair comparisons.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.95\linewidth]{fig_pareto.pdf}
+  \includegraphics[width=0.95\linewidth]{fig3/fig_pareto.pdf}
   \caption{Equivariance vs.\ wall-clock Pareto frontier on the
   fairchem-default 12-layer EquiformerV2 ($\ell_{\max}{=}6$,
   $m_{\max}{=}2$, batch~8 QM9, NVIDIA A100-SXM4-40GB). Each point is
@@ -797,6 +845,118 @@ expected to compound.
 \appendix
 %========================================================================
 
+\section{\texorpdfstring{Exact integration $\Rightarrow$ exact equivariance}{Exact integration implies exact equivariance}}
+\label{app:exact-equivariance}
+
+We formalise the claim from \S\ref{sec:bg} that the equivariance error
+of $\mathcal{A}_\sigma$ vanishes when the quadrature in
+\eqref{eq:s2act} is replaced by the exact integral. Define the
+\emph{continuous} $S^2$-activation operator
+$\mathcal{A}^{\star}_\sigma$ acting on bandlimited
+$f \in V_{\ell_{\max}} := \mathrm{span}\{Y_{\ell m} : 0 \leq \ell
+\leq \ell_{\max}\}$ by
+\begin{equation}
+  \bigl(\mathcal{A}^{\star}_\sigma f\bigr)(\theta, \phi)
+  \;=\;
+  \sum_{\ell=0}^{\ell_{\max}} \sum_{m=-\ell}^{\ell}
+  \biggl(\,
+    \int_{S^2} \sigma\!\bigl(f(\theta', \phi')\bigr)\,
+                 Y_{\ell m}(\theta', \phi')\, d\Omega'
+  \biggr)\,
+  Y_{\ell m}(\theta, \phi),
+  \label{eq:exact-op}
+\end{equation}
+i.e.\ apply $\sigma$ pointwise on $S^2$ and project back onto
+$V_{\ell_{\max}}$ via exact integration. In SH-coefficient
+coordinates this is exactly \eqref{eq:s2act} with the quadrature sum
+$\sum_i w_i (\cdot)$ replaced by the integral
+$\int_{S^2} (\cdot)\,d\Omega$.
+
+Let $R \in \mathrm{SO}(3)$ act on functions on $S^2$ by
+$(R \cdot f)(\theta,\phi) = f(R^{-1} \cdot (\theta,\phi))$, and let
+$\mathcal{D}(R)$ denote the Wigner-$D$ representation acting on the
+SH-coefficient vector. We show:
+
+\begin{proposition}
+For every measurable $\sigma : \mathbb{R} \to \mathbb{R}$ such that
+$\sigma \circ f \in L^2(S^2)$ for all $f \in V_{\ell_{\max}}$ and
+every $R \in \mathrm{SO}(3)$,
+\begin{equation}
+  \mathcal{A}^{\star}_\sigma(\mathcal{D}(R)\,c)
+  \;=\;
+  \mathcal{D}(R)\,\mathcal{A}^{\star}_\sigma(c)
+  \qquad \text{for all } c \in \mathbb{R}^{(\ell_{\max}+1)^2}.
+  \label{eq:exact-equivariance}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Two ingredients suffice: (i) the action of $\mathrm{SO}(3)$ on
+$V_{\ell_{\max}}$ via the Wigner matrices is the same as the rotation
+of the underlying function on the sphere, and (ii) the Haar measure
+$d\Omega$ on $S^2$ is rotation-invariant.
+
+Concretely, let $f(\theta, \phi) = \sum_{\ell, m} c_{\ell m}\,Y_{\ell
+m}(\theta, \phi)$ be the band-limited function with coefficients $c$.
+By construction of the Wigner-$D$ representation,
+\begin{equation}
+  R \cdot f
+  \;=\;
+  \sum_{\ell, m} \bigl[\mathcal{D}(R)\,c\bigr]_{\ell m}\,
+  Y_{\ell m},
+  \label{eq:wigner-action}
+\end{equation}
+i.e.\ rotating the function and rotating its coefficient vector are
+the same operation. Now compute the $(\ell, m)$-coefficient of
+$\mathcal{A}^{\star}_\sigma$ applied to $\mathcal{D}(R)\,c$:
+\begin{align}
+  \bigl[\mathcal{A}^{\star}_\sigma(\mathcal{D}(R)\,c)\bigr]_{\ell m}
+  &\;=\; \int_{S^2} \sigma\!\bigl((R \cdot f)(\theta, \phi)\bigr)\,
+         Y_{\ell m}(\theta, \phi)\,d\Omega
+   \tag{by \eqref{eq:exact-op}, \eqref{eq:wigner-action}} \\
+  &\;=\; \int_{S^2} \sigma\!\bigl(f(R^{-1} \cdot (\theta, \phi))\bigr)\,
+         Y_{\ell m}(\theta, \phi)\,d\Omega
+   \tag{def.\ of $R \cdot f$} \\
+  &\;=\; \int_{S^2} \sigma\!\bigl(f(\theta', \phi')\bigr)\,
+         Y_{\ell m}(R \cdot (\theta', \phi'))\,d\Omega'
+   \tag{$d\Omega = d\Omega'$, $\Omega' = R^{-1}\Omega$} \\
+  &\;=\; \int_{S^2} \sigma\!\bigl(f(\theta', \phi')\bigr)\,
+         \Bigl(\sum_{m'} \mathcal{D}(R)_{(\ell m), (\ell m')}\,
+                          Y_{\ell m'}(\theta', \phi')\Bigr)\,d\Omega'
+   \tag{$Y_{\ell m}$ are an SO(3)-irrep} \\
+  &\;=\; \sum_{m'} \mathcal{D}(R)_{(\ell m), (\ell m')}\,
+         \int_{S^2} \sigma\!\bigl(f(\theta', \phi')\bigr)\,
+                      Y_{\ell m'}(\theta', \phi')\,d\Omega' \\
+  &\;=\; \sum_{m'} \mathcal{D}(R)_{(\ell m), (\ell m')}\,
+         \bigl[\mathcal{A}^{\star}_\sigma(c)\bigr]_{\ell m'}
+   \tag{by \eqref{eq:exact-op}} \\
+  &\;=\; \bigl[\mathcal{D}(R)\,
+         \mathcal{A}^{\star}_\sigma(c)\bigr]_{\ell m}.
+\end{align}
+The third equality is the rotation invariance of the Haar measure on
+$S^2$; the fourth uses that each subspace
+$V_\ell = \mathrm{span}\{Y_{\ell m}\}_m$ is an SO(3)-irrep on which
+$\mathcal{D}(R)$ acts blockwise. Equation \eqref{eq:exact-equivariance}
+follows.
+\end{proof}
+
+Two remarks. First, the result holds for \emph{any} pointwise $\sigma$
+under mild integrability assumptions; nothing in the proof uses
+smoothness or band-limited-ness of $\sigma(f)$. Second, the proof
+identifies precisely where the discrete operator
+\eqref{eq:s2act} departs from \eqref{eq:exact-op}: replacing
+$\int_{S^2} g(\theta', \phi')\,d\Omega'$ by $\sum_i w_i\,
+g(\theta_i, \phi_i)$ uses the rotation invariance of $d\Omega$ via a
+change of variables $\Omega' = R^{-1}\Omega$, which has no
+finite-sum analogue when $\{(\theta_i, \phi_i)\}$ is not a fixed
+point set of every $R \in \mathrm{SO}(3)$. Equivalently, a finite
+quadrature is exact only on a finite-dimensional polynomial subspace
+of $L^2(S^2)$, and $\sigma(f)$ generically leaves that subspace
+(Figure~\ref{fig:workflow}, bottom); the residual
+high-$\ell$ content aliases into the kept coefficients in a
+rotation-dependent way.
+
+%========================================================================
 \section{Scaling savings across architectures}
 \label{app:scale}
 
@@ -818,7 +978,7 @@ fraction of forward time.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.95\linewidth]{fig_sweep_models.pdf}
+  \includegraphics[width=0.95\linewidth]{fig4/fig_sweep_models.pdf}
   \caption{Forward wall-clock per QM9 batch~8 across three published
   EquiformerV2 architectures, for four grid configurations.
   $n=3$ runs $\times$ 20 measured forwards on distinct batches per
