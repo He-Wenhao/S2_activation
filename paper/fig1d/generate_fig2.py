@@ -74,7 +74,7 @@ def sph_to_xyz(theta, phi):
 
 
 def style_sphere(ax, title, elev=ELEV, azim=AZIM):
-    ax.set_title(title, fontsize=11)
+    ax.set_title(title, fontsize=9)
     ax.set_box_aspect([1, 1, 1])
     ax.set_axis_off()
     ax.view_init(elev=elev, azim=azim)
@@ -292,21 +292,21 @@ def main():
     xyz_gl, weights_gl = build_gl_panel()
     xyz_leb, weights_leb = build_lebedev_proxy_panel(xyz_gl.shape[0])
 
-    fig = plt.figure(figsize=(12.5, 4.2), dpi=180)
+    fig = plt.figure(figsize=(5.5, 2.4), dpi=180)
 
     panels = [
         (
-            "Driscoll--Healy weights\nfront surface only",
+            "Driscoll--Healy\nquadrature",
             xyz_dh,
             weights_dh,
         ),
         (
-            "Gauss--Legendre weights\nfront surface only",
+            "Gauss--Legendre\nquadrature",
             xyz_gl,
             weights_gl,
         ),
         (
-            "Lebedev-style proxy weights\nfront surface only",
+            "Lebedev\nquadrature",
             xyz_leb,
             weights_leb,
         ),
@@ -315,10 +315,49 @@ def main():
     for idx, (title, xyz, weights) in enumerate(panels, start=1):
         ax = fig.add_subplot(1, 3, idx, projection="3d")
         plot_weight_disks_front_only(ax, xyz, weights, title)
-        ax.text2D(0.02, 0.98, f"({chr(ord('a') + idx - 1)})",
-                  transform=ax.transAxes, ha="left", va="top",
-                  fontsize=14, fontweight="bold")
-    fig.tight_layout()
+    fig.tight_layout(rect=[0.0, 0.13, 1.0, 0.88])
+    fig.text(0.015, 0.99, "(d)", ha="left", va="top",
+             fontsize=11, fontweight="bold")
+
+    # Legend row at the bottom: explain encoding of disks on the spheres.
+    # Disk style matches the tangent disks in the panels (default C0 fill,
+    # black edge, alpha 0.72, linewidth 0.35). Use scatter for a guaranteed
+    # circular marker that matches that styling.
+    leg_ax = fig.add_axes([0.0, 0.0, 1.0, 0.12])
+    leg_ax.set_xlim(0.0, 1.0)
+    leg_ax.set_ylim(0.0, 1.0)
+    leg_ax.set_axis_off()
+
+    from matplotlib.patches import FancyBboxPatch
+    box = FancyBboxPatch(
+        (0.16, 0.18), 0.68, 0.74,
+        boxstyle="round,pad=0.012",
+        linewidth=0.6,
+        edgecolor="black",
+        facecolor="white",
+        transform=leg_ax.transAxes,
+    )
+    leg_ax.add_patch(box)
+
+    marker_kwargs = dict(
+        s=70,
+        c="C0",
+        edgecolor="black",
+        linewidths=0.4,
+        alpha=0.72,
+    )
+    y = 0.55
+    leg_ax.text(0.255, y, r"$w_i \,\sim\,$",
+                ha="right", va="center", fontsize=9)
+    leg_ax.scatter([0.275], [y], **marker_kwargs)
+    leg_ax.text(0.300, y, "size",
+                ha="left", va="center", fontsize=9)
+
+    leg_ax.text(0.555, y, r"$\Omega_i \,\sim\,$",
+                ha="right", va="center", fontsize=9)
+    leg_ax.scatter([0.575], [y], **marker_kwargs)
+    leg_ax.text(0.600, y, "spherical coordinate",
+                ha="left", va="center", fontsize=9)
 
     out_dir = Path(__file__).resolve().parent
     out_png = out_dir / "fig_quadratures.png"

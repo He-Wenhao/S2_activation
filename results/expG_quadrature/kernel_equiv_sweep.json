@@ -1,0 +1,54 @@
+{
+  "L4_M2": {
+    "DH default": {
+      "n_points": 50,
+      "equiv_err_mean": 0.37253217577934267,
+      "equiv_err_std": 0.1119796805188095,
+      "equiv_err_ci95": 0.0310391838483817
+    },
+    "DH 2x": {
+      "n_points": 400,
+      "equiv_err_mean": 0.2368318520486355,
+      "equiv_err_std": 0.09848203572791392,
+      "equiv_err_ci95": 0.0272978275929994
+    },
+    "GL match-DH": {
+      "n_points": 90,
+      "equiv_err_mean": 0.237105980142951,
+      "equiv_err_std": 0.09904781963358608,
+      "equiv_err_ci95": 0.027454654890463105
+    },
+    "GL 2x": {
+      "n_points": 200,
+      "equiv_err_mean": 0.23658713310956955,
+      "equiv_err_std": 0.09839220763036234,
+      "equiv_err_ci95": 0.02727292851468684
+    }
+  },
+  "L6_M2": {
+    "DH default": {
+      "n_points": 70,
+      "equiv_err_mean": 0.46277686893939973,
+      "equiv_err_std": 0.10583368046654278,
+      "equiv_err_ci95": 0.029335599549242475
+    },
+    "DH 2x": {
+      "n_points": 784,
+      "equiv_err_mean": 0.33755076557397845,
+      "equiv_err_std": 0.11675102945092261,
+      "equiv_err_ci95": 0.032361734297021015
+    },
+    "GL match-DH": {
+      "n_points": 182,
+      "equiv_err_mean": 0.3379028755426407,
+      "equiv_err_std": 0.11653180563458834,
+      "equiv_err_ci95": 0.03230096855534702
+    },
+    "GL 2x": {
+      "n_points": 392,
+      "equiv_err_mean": 0.3379841750860214,
+      "equiv_err_std": 0.11663265300821701,
+      "equiv_err_ci95": 0.03232892202115603
+    }
+  }
+}

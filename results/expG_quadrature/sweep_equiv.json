@@ -1,0 +1,135 @@
+{
+  "device": "NVIDIA A100-SXM4-40GB",
+  "args": {
+    "n_rotations": 10,
+    "n_batches": 20,
+    "batch_size": 8,
+    "seed": 42,
+    "out": "results/expG_quadrature/sweep_equiv.json"
+  },
+  "configs": {
+    "QM9-small (4L/64ch/L4/M2, our expF model)": {
+      "backbone": {
+        "num_layers": 4,
+        "sphere_channels": 64,
+        "attn_hidden_channels": 64,
+        "ffn_hidden_channels": 128,
+        "num_heads": 4,
+        "lmax_list": [
+          4
+        ],
+        "mmax_list": [
+          2
+        ]
+      },
+      "results": {
+        "DH default": {
+          "pred_invariance_error_mean": 2.0801996587728543e-05,
+          "pred_invariance_error_std": 7.3210399452304135e-06,
+          "pred_invariance_error_ci95": 1.014644370159563e-06,
+          "n_samples": 200
+        },
+        "DH 2x": {
+          "pred_invariance_error_mean": 7.792048420965849e-07,
+          "pred_invariance_error_std": 2.743102998966484e-07,
+          "pred_invariance_error_ci95": 3.801746794842217e-08,
+          "n_samples": 200
+        },
+        "GL match-DH": {
+          "pred_invariance_error_mean": 9.163937336443278e-05,
+          "pred_invariance_error_std": 3.2535444054400895e-05,
+          "pred_invariance_error_ci95": 4.509182491477352e-06,
+          "n_samples": 200
+        },
+        "GL 2x": {
+          "pred_invariance_error_mean": 7.920373795988006e-07,
+          "pred_invariance_error_std": 2.6458759664919975e-07,
+          "pred_invariance_error_ci95": 3.6669970026466035e-08,
+          "n_samples": 200
+        }
+      }
+    },
+    "OC20-31M-public (8L/128ch/L4/M2, eq2_31M_ec4_allmd.pt)": {
+      "backbone": {
+        "num_layers": 8,
+        "sphere_channels": 128,
+        "attn_hidden_channels": 64,
+        "ffn_hidden_channels": 128,
+        "num_heads": 8,
+        "lmax_list": [
+          4
+        ],
+        "mmax_list": [
+          2
+        ]
+      },
+      "results": {
+        "DH default": {
+          "pred_invariance_error_mean": 7.71386792787856e-05,
+          "pred_invariance_error_std": 3.641581147459689e-05,
+          "pred_invariance_error_ci95": 5.046973978275277e-06,
+          "n_samples": 200
+        },
+        "DH 2x": {
+          "pred_invariance_error_mean": 3.5007303784752635e-06,
+          "pred_invariance_error_std": 1.949395056676338e-06,
+          "pred_invariance_error_ci95": 2.7017237090232505e-07,
+          "n_samples": 200
+        },
+        "GL match-DH": {
+          "pred_invariance_error_mean": 0.0003276167731105885,
+          "pred_invariance_error_std": 0.0001815490484266391,
+          "pred_invariance_error_ci95": 2.5161414399046513e-05,
+          "n_samples": 200
+        },
+        "GL 2x": {
+          "pred_invariance_error_mean": 3.4835552576059506e-06,
+          "pred_invariance_error_std": 2.008241776653425e-06,
+          "pred_invariance_error_ci95": 2.7832811019261636e-07,
+          "n_samples": 200
+        }
+      }
+    },
+    "fairchem-default (12L/128ch/L6/M2)": {
+      "backbone": {
+        "num_layers": 12,
+        "sphere_channels": 128,
+        "attn_hidden_channels": 128,
+        "ffn_hidden_channels": 256,
+        "num_heads": 8,
+        "lmax_list": [
+          6
+        ],
+        "mmax_list": [
+          2
+        ]
+      },
+      "results": {
+        "DH default": {
+          "pred_invariance_error_mean": 0.00024237657463463833,
+          "pred_invariance_error_std": 9.475522539430824e-05,
+          "pred_invariance_error_ci95": 1.3132404236118319e-05,
+          "n_samples": 200
+        },
+        "DH 2x": {
+          "pred_invariance_error_mean": 3.038894124218686e-06,
+          "pred_invariance_error_std": 1.4491019349228213e-06,
+          "pred_invariance_error_ci95": 2.0083528174363688e-07,
+          "n_samples": 200
+        },
+        "GL match-DH": {
+          "pred_invariance_error_mean": 0.0008431267008273471,
+          "pred_invariance_error_std": 0.0003657266961573493,
+          "pred_invariance_error_ci95": 5.068713407510749e-05,
+          "n_samples": 200
+        },
+        "GL 2x": {
+          "pred_invariance_error_mean": 4.155448907762096e-06,
+          "pred_invariance_error_std": 2.2067460453180503e-06,
+          "pred_invariance_error_ci95": 3.05839398228194e-07,
+          "n_samples": 200
+        }
+      }
+    }
+  }
+}

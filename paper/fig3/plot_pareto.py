@@ -34,6 +34,14 @@ def main():
         if r["fwd_ms_mean"] is None:
             omitted.append(r["label"])
             continue
+        # Normalize new expG_pareto.py format (config dict + equiv_err_mean)
+        # to the keys the plotter expects.
+        if "method" not in r and "config" in r:
+            r["method"] = r["config"].get("method", "")
+            r["n_beta"] = r["config"].get("n_beta") or 0
+            r["n_alpha"] = r["config"].get("n_alpha") or 0
+        if "equiv_err" not in r and "equiv_err_mean" in r:
+            r["equiv_err"] = r["equiv_err_mean"]
         r["estimated"] = False
         points.append(r)
     if omitted:
@@ -100,7 +108,9 @@ def main():
         text_xy, draw_leader, ha = annotations.get(
             r["label"], ((r["fwd_ms_mean"] + 4, r["equiv_err"]), False, "left")
         )
-        label = f"{r['label']}  ({r['n_beta']}×{r['n_alpha']}, {r['n_points']} pts)"
+        method_short = "DH" if r["method"] == "dh" else (
+            "GL" if r["method"] == "gl" else r["method"].upper())
+        label = f"{method_short} ×{r['n_points']} pts"
         ax.text(
             text_xy[0], text_xy[1], label,
             fontsize=8.7, ha=ha, va="center",
@@ -116,7 +126,27 @@ def main():
             )
 
     # Highlight the matched-equivariance comparison
-    pareto = data.get("pareto", [{}])[0]
+    pareto_list = data.get("pareto") or []
+    pareto = pareto_list[0] if pareto_list else {}
+    if "cheapest_dh" not in pareto or "cheapest_gl" not in pareto:
+        # New pareto.json format has no "pareto" block — synthesize.
+        dh_pts = [r for r in points if r["method"] == "dh"]
+        gl_pts = [r for r in points if r["method"] == "gl"]
+        if dh_pts and gl_pts:
+            target = max(min(r["equiv_err"] for r in dh_pts),
+                         min(r["equiv_err"] for r in gl_pts))
+            dh_ok = [r for r in dh_pts if r["equiv_err"] <= target + 1e-6]
+            gl_ok = [r for r in gl_pts if r["equiv_err"] <= target + 1e-6]
+            if dh_ok and gl_ok:
+                dh_best = min(dh_ok, key=lambda r: r["fwd_ms_mean"])
+                gl_best = min(gl_ok, key=lambda r: r["fwd_ms_mean"])
+                pareto = {
+                    "cheapest_dh": {"label": dh_best["label"], "fwd_ms": dh_best["fwd_ms_mean"]},
+                    "cheapest_gl": {"label": gl_best["label"], "fwd_ms": gl_best["fwd_ms_mean"]},
+                    "equiv_target": target,
+                    "savings_ms": dh_best["fwd_ms_mean"] - gl_best["fwd_ms_mean"],
+                    "savings_pct": 100 * (dh_best["fwd_ms_mean"] - gl_best["fwd_ms_mean"]) / dh_best["fwd_ms_mean"],
+                }
     if "cheapest_dh" in pareto and "cheapest_gl" in pareto:
         dh_t = pareto["cheapest_dh"]["fwd_ms"]
         gl_t = pareto["cheapest_gl"]["fwd_ms"]

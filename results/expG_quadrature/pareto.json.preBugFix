@@ -1,0 +1,45 @@
+{
+  "config": "fairchem default EquiformerV2: 12 layers, 128 channels, lmax=6, mmax=2",
+  "device": "NVIDIA A100-SXM4-40GB",
+  "note": "Equivariance from experiments/verify_gl_grid.py (single S2-act kernel, SiLU, 5 rotations × 10 random inputs at lmax=6, mmax=2). Wall-clock from experiments/expG_verify_speedup_v2.py (5 independent runs × 30 iterations on distinct QM9 batches = 150 forwards per config, each on its own batch). Statistics: 95% CI on run means with t-distribution, df=4 (no pseudo-replication).",
+  "results": [
+    {
+      "label": "DH default", "method": "dh", "n_beta": 14, "n_alpha": 5, "n_points": 70,
+      "equiv_err": 0.443,
+      "fwd_ms_mean": 113.50, "fwd_ms_ci95": 1.87
+    },
+    {
+      "label": "DH 2x", "method": "dh", "n_beta": 28, "n_alpha": 28, "n_points": 784,
+      "equiv_err": 0.327,
+      "fwd_ms_mean": 164.66, "fwd_ms_ci95": 1.62
+    },
+    {
+      "label": "GL min", "method": "gl", "n_beta": 7, "n_alpha": 13, "n_points": 91,
+      "equiv_err": 0.429,
+      "fwd_ms_mean": 112.68, "fwd_ms_ci95": 1.87
+    },
+    {
+      "label": "GL match-DH", "method": "gl", "n_beta": 14, "n_alpha": 13, "n_points": 182,
+      "equiv_err": 0.328,
+      "fwd_ms_mean": 113.17, "fwd_ms_ci95": 2.25
+    },
+    {
+      "label": "GL 2x", "method": "gl", "n_beta": 14, "n_alpha": 28, "n_points": 392,
+      "equiv_err": 0.328,
+      "fwd_ms_mean": 112.61, "fwd_ms_ci95": 2.35
+    }
+  ],
+  "pareto": [
+    {
+      "equiv_target": 0.328,
+      "cheapest_dh": {"label": "DH 2x", "fwd_ms": 164.66},
+      "cheapest_gl": {"label": "GL match-DH", "fwd_ms": 113.17},
+      "savings_ms": 51.50,
+      "savings_pct": 31.27,
+      "savings_p_value": 1.357735e-10,
+      "savings_p_value_test": "Welch's t-test on n=5 run means",
+      "savings_ci95_ms": 2.36,
+      "savings_t_stat": -51.5459
+    }
+  ]
+}

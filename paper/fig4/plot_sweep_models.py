@@ -20,10 +20,15 @@ def main():
     arch_order = list(data["configs"].keys())
     grid_order = ["DH default", "DH 2x", "GL match-DH", "GL 2x"]
     grid_styles = {
-        "DH default":   ("#d62728", "//"),
-        "DH 2x":        ("#a02020", "xx"),
-        "GL match-DH":  ("#1f77b4", ""),
-        "GL 2x":        ("#114488", ""),
+        "DH default":   ("#d62728", "",   "DH min"),
+        "DH 2x":        ("#a02020", "xx", "DH 2× density"),
+        "GL match-DH":  ("#1f77b4", "",   "GL min"),
+        "GL 2x":        ("#114488", "xx", "GL 2× density"),
+    }
+    # n_points per (lmax, grid)
+    NPTS = {
+        4: {"DH default": 50, "DH 2x": 400, "GL match-DH": 90,  "GL 2x": 200},
+        6: {"DH default": 70, "DH 2x": 784, "GL match-DH": 182, "GL 2x": 392},
     }
 
     fig, ax = plt.subplots(figsize=(10, 5.2))
@@ -35,23 +40,40 @@ def main():
         means = [data["configs"][a]["results"][label]["mean"] for a in arch_order]
         cis = [data["configs"][a]["results"][label]["ci95"] for a in arch_order]
         offset = (i - 1.5) * bar_w
-        color, hatch = grid_styles[label]
-        bars = ax.bar(
+        color, hatch, leg_label = grid_styles[label]
+        ax.bar(
             x + offset, means, bar_w,
-            yerr=cis, capsize=3, label=label,
+            yerr=cis, capsize=3, label=leg_label,
             color=color, hatch=hatch, edgecolor="black", linewidth=0.6,
             alpha=0.95, error_kw=dict(elinewidth=1.0, capthick=1.0),
         )
+        # n_pts label above each bar
+        for j, a in enumerate(arch_order):
+            L = data["configs"][a]["backbone"]["lmax_list"][0]
+            npts = NPTS[L][label]
+            # NB: "GL match-DH" contains "DH" as substring; match by prefix.
+            method_short = "DH" if label.startswith("DH") else "GL"
+            ax.text(
+                x[j] + offset, means[j] + cis[j] + 2.5,
+                f"×{npts}", ha="center", va="bottom",
+                fontsize=7.5, color="black", rotation=0,
+            )
 
-    # Annotate savings on top of each architecture group
+    # Annotate matched-invariance saving (GL 2× vs DH 2× — both reach ~10⁻⁶
+    # pred-invariance, see fig:sweep bottom panels). Kernel-level "matched
+    # equivariance" between GL ×N_match and DH 2× does NOT translate to
+    # model-level, so we no longer label that as a saving.
     for i, a in enumerate(arch_order):
-        sav = data["configs"][a]["matched_equiv_savings"]
-        dh2_mean = data["configs"][a]["results"]["DH 2x"]["mean"]
-        gl_mean = data["configs"][a]["results"]["GL match-DH"]["mean"]
-        ymax = max(dh2_mean, gl_mean) * 1.08
+        dh2 = data["configs"][a]["results"]["DH 2x"]["mean"]
+        gl2 = data["configs"][a]["results"]["GL 2x"]["mean"]
+        saved = dh2 - gl2
+        pct = 100 * saved / dh2 if dh2 > 0 else 0.0
+        ymax = max(dh2, gl2) * 1.10
         ax.annotate(
-            f"GL→DH 2× saves\n{sav['savings_ms']:+.1f} ms ({sav['savings_pct']:+.1f}%)",
-            xy=(x[i], ymax + 8), ha="center", fontsize=9.5, color="green",
+            f"GL 2× vs DH 2× at matched\n"
+            f"model-level invariance:\n"
+            f"−{saved:.1f} ms ({pct:.1f}%)",
+            xy=(x[i], ymax + 8), ha="center", fontsize=8.5, color="green",
             weight="bold",
         )
 
@@ -60,11 +82,11 @@ def main():
     short_labels = []
     for a in arch_order:
         if "QM9-small" in a:
-            short_labels.append("QM9-small\n(4L / 64ch / lmax=4)")
+            short_labels.append("QM9-small\n(4L / 64ch / lmax=4 / mmax=2)")
         elif "OC20-31M" in a:
-            short_labels.append("OC20 EqV2-31M\n(8L / 128ch / lmax=4)\n[public ckpt]")
+            short_labels.append("OC20 EqV2-31M\n(8L / 128ch / lmax=4 / mmax=2)\n[public ckpt]")
         elif "fairchem-default" in a:
-            short_labels.append("fairchem default\n(12L / 128ch / lmax=6)")
+            short_labels.append("fairchem default\n(12L / 128ch / lmax=6 / mmax=2)")
         else:
             short_labels.append(a)
     ax.set_xticklabels(short_labels, fontsize=9)

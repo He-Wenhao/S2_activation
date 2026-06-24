@@ -307,5 +307,17 @@ def patch_so3_grid(model: torch.nn.Module, method: str = "gl",
             n_replaced += 1
         new_outer.append(new_inner)
 
+    # EquiformerV2's transformer blocks (SO2EquivariantGraphAttention and
+    # FeedForwardNetwork) capture a reference to backbone.SO3_grid at
+    # construction time and use self.SO3_grid in forward(). Rebinding only
+    # backbone.SO3_grid leaves every block pointing at the old ModuleList,
+    # so the forward pass keeps using the original DH grid. Reseat every
+    # submodule whose .SO3_grid is the old list.
+    old_outer = so3_grid
     backbone.SO3_grid = new_outer
+    for mod in model.modules():
+        if mod is backbone:
+            continue
+        if mod._modules.get("SO3_grid", None) is old_outer:
+            mod.SO3_grid = new_outer
     return n_replaced

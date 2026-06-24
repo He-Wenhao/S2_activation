@@ -1,0 +1,298 @@
+{
+  "args": {
+    "seeds": [
+      123,
+      456,
+      789,
+      1024
+    ],
+    "activation": "SiLU",
+    "orig_grid": "default",
+    "target": "U0",
+    "n_rotations": 10,
+    "n_equiv_batches": 20,
+    "n_test_batches": 50,
+    "out": "results/expG_quadrature/dropin_pretrained.json"
+  },
+  "device": "cuda",
+  "per_seed": [
+    {
+      "checkpoint": "SiLU_default_U0_seed123",
+      "seed": 123,
+      "trained_with": "default",
+      "metrics": {
+        "default": {
+          "test_mae": 4.1863916015625,
+          "pred_invariance_error": 1.2404089398463384e-05,
+          "per_layer_l0_error_mean": {
+            "0": 8.648515794263602e-05,
+            "1": 0.00034394058676584597,
+            "2": 0.0005052649669052069,
+            "3": 0.0006213361571642571
+          }
+        },
+        "GL min": {
+          "test_mae": 4.182805480957032,
+          "test_mae_delta": -0.003586120605468146,
+          "pred_invariance_error": 1.2400058262700096e-05,
+          "pred_invariance_ratio_to_ref": 0.999675015582862,
+          "per_layer_l0_error_mean": {
+            "0": 8.740671111320129e-05,
+            "1": 0.00034351262773763615,
+            "2": 0.0005017366394282534,
+            "3": 0.000625440503203155
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 5,
+          "n_alpha": 9
+        },
+        "GL match-DH": {
+          "test_mae": 4.178824768066407,
+          "test_mae_delta": -0.007566833496093217,
+          "pred_invariance_error": 1.2862749879072226e-05,
+          "pred_invariance_ratio_to_ref": 1.0369765539311302,
+          "per_layer_l0_error_mean": {
+            "0": 8.618414000910388e-05,
+            "1": 0.0003408146796897741,
+            "2": 0.0004987610740673127,
+            "3": 0.0006241026094653922
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 9
+        },
+        "GL 2x": {
+          "test_mae": 4.179354553222656,
+          "test_mae_delta": -0.007037048339843643,
+          "pred_invariance_error": 1.2770785604436965e-05,
+          "pred_invariance_ratio_to_ref": 1.0295625252442155,
+          "per_layer_l0_error_mean": {
+            "0": 8.675727980844796e-05,
+            "1": 0.00034449530961701817,
+            "2": 0.0005031835293255559,
+            "3": 0.0006145886294659103
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 20
+        }
+      }
+    },
+    {
+      "checkpoint": "SiLU_default_U0_seed456",
+      "seed": 456,
+      "trained_with": "default",
+      "metrics": {
+        "default": {
+          "test_mae": 3.3873797607421876,
+          "pred_invariance_error": 1.1093405862154415e-05,
+          "per_layer_l0_error_mean": {
+            "0": 5.7804002820050404e-05,
+            "1": 0.00034420208557299633,
+            "2": 0.0005812015200382162,
+            "3": 0.0006884526202661534
+          }
+        },
+        "GL min": {
+          "test_mae": 3.3942578125,
+          "test_mae_delta": 0.006878051757812198,
+          "pred_invariance_error": 1.1175811078461029e-05,
+          "pred_invariance_ratio_to_ref": 1.0074283062686584,
+          "per_layer_l0_error_mean": {
+            "0": 5.868307077923157e-05,
+            "1": 0.0003502973120564038,
+            "2": 0.0005689057324784148,
+            "3": 0.0006824050741420181
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 5,
+          "n_alpha": 9
+        },
+        "GL match-DH": {
+          "test_mae": 3.388336181640625,
+          "test_mae_delta": 0.0009564208984373934,
+          "pred_invariance_error": 1.121548893987541e-05,
+          "pred_invariance_ratio_to_ref": 1.0110050131797204,
+          "per_layer_l0_error_mean": {
+            "0": 5.931492795570263e-05,
+            "1": 0.0003522330178175406,
+            "2": 0.0005832268185222298,
+            "3": 0.0006909517023745274
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 9
+        },
+        "GL 2x": {
+          "test_mae": 3.3893362426757814,
+          "test_mae_delta": 0.0019564819335937678,
+          "pred_invariance_error": 1.1207103912964115e-05,
+          "pred_invariance_ratio_to_ref": 1.0102491563206557,
+          "per_layer_l0_error_mean": {
+            "0": 5.880712134885204e-05,
+            "1": 0.0003438664814606021,
+            "2": 0.0005727598072192844,
+            "3": 0.0006854981726222783
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 20
+        }
+      }
+    },
+    {
+      "checkpoint": "SiLU_default_U0_seed789",
+      "seed": 789,
+      "trained_with": "default",
+      "metrics": {
+        "default": {
+          "test_mae": 3.946337890625,
+          "pred_invariance_error": 1.5499029946381416e-05,
+          "per_layer_l0_error_mean": {
+            "0": 3.7395296185807126e-05,
+            "1": 0.0004397409041510474,
+            "2": 0.0006100516144285019,
+            "3": 0.0009695221708066505
+          }
+        },
+        "GL min": {
+          "test_mae": 3.9519223022460936,
+          "test_mae_delta": 0.005584411621093466,
+          "pred_invariance_error": 1.5355736086037156e-05,
+          "pred_invariance_ratio_to_ref": 0.9907546562049379,
+          "per_layer_l0_error_mean": {
+            "0": 3.7721569733048953e-05,
+            "1": 0.00043623220698376297,
+            "2": 0.0006091386048727652,
+            "3": 0.0009756391993054459
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 5,
+          "n_alpha": 9
+        },
+        "GL match-DH": {
+          "test_mae": 3.9432464599609376,
+          "test_mae_delta": -0.003091430664062589,
+          "pred_invariance_error": 1.5699635493477997e-05,
+          "pred_invariance_ratio_to_ref": 1.012943103393604,
+          "per_layer_l0_error_mean": {
+            "0": 3.690239766644516e-05,
+            "1": 0.00044285425360305914,
+            "2": 0.0006148125268302908,
+            "3": 0.0009770255755355965
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 9
+        },
+        "GL 2x": {
+          "test_mae": 3.9464535522460937,
+          "test_mae_delta": 0.0001156616210935546,
+          "pred_invariance_error": 1.5224488983122294e-05,
+          "pred_invariance_ratio_to_ref": 0.982286571210657,
+          "per_layer_l0_error_mean": {
+            "0": 3.7284391530432754e-05,
+            "1": 0.0004404192399125987,
+            "2": 0.0006140879203169513,
+            "3": 0.0009671383185366092
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 20
+        }
+      }
+    },
+    {
+      "checkpoint": "SiLU_default_U0_seed1024",
+      "seed": 1024,
+      "trained_with": "default",
+      "metrics": {
+        "default": {
+          "test_mae": 4.165398254394531,
+          "pred_invariance_error": 1.1063431754307188e-05,
+          "per_layer_l0_error_mean": {
+            "0": 2.9205990299917464e-05,
+            "1": 0.0008644902510335316,
+            "2": 0.0005420405007815205,
+            "3": 0.0005029909140338107
+          }
+        },
+        "GL min": {
+          "test_mae": 4.153277282714844,
+          "test_mae_delta": -0.012120971679687287,
+          "pred_invariance_error": 1.129141469218076e-05,
+          "pred_invariance_ratio_to_ref": 1.0206068915085786,
+          "per_layer_l0_error_mean": {
+            "0": 2.9252584335535214e-05,
+            "1": 0.0008565228208238756,
+            "2": 0.0005384109422292391,
+            "3": 0.0005020955644489084
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 5,
+          "n_alpha": 9
+        },
+        "GL match-DH": {
+          "test_mae": 4.158253784179688,
+          "test_mae_delta": -0.007144470214843324,
+          "pred_invariance_error": 1.1182730452463522e-05,
+          "pred_invariance_ratio_to_ref": 1.0107831548840973,
+          "per_layer_l0_error_mean": {
+            "0": 2.9509733074320927e-05,
+            "1": 0.0008748563754644259,
+            "2": 0.000542704827311012,
+            "3": 0.0005080349750009906
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 9
+        },
+        "GL 2x": {
+          "test_mae": 4.160311584472656,
+          "test_mae_delta": -0.005086669921874787,
+          "pred_invariance_error": 1.077549991919325e-05,
+          "pred_invariance_ratio_to_ref": 0.9739744555298729,
+          "per_layer_l0_error_mean": {
+            "0": 2.9353802425151758e-05,
+            "1": 0.0008482634190373826,
+            "2": 0.0005384500289737309,
+            "3": 0.0005025269568717615
+          },
+          "n_grids_replaced": 25,
+          "n_beta": 10,
+          "n_alpha": 20
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "default": {
+      "test_mae_delta_mean": 0.0,
+      "test_mae_delta_std": 0.0,
+      "inv_err_ratio_mean": 1.0,
+      "inv_err_ratio_std": 0.0,
+      "n_seeds": 4
+    },
+    "GL min": {
+      "test_mae_delta_mean": -0.0008111572265624423,
+      "test_mae_delta_std": 0.008862647467675292,
+      "inv_err_ratio_mean": 1.0046162173912592,
+      "inv_err_ratio_std": 0.012651322149801058,
+      "n_seeds": 4
+    },
+    "GL match-DH": {
+      "test_mae_delta_mean": -0.004211578369140434,
+      "test_mae_delta_std": 0.003992598938720224,
+      "inv_err_ratio_mean": 1.017926956347138,
+      "inv_err_ratio_std": 0.012736733685562041,
+      "n_seeds": 4
+    },
+    "GL 2x": {
+      "test_mae_delta_mean": -0.002512893676757777,
+      "test_mae_delta_std": 0.004241733956599893,
+      "inv_err_ratio_mean": 0.9990181770763503,
+      "inv_err_ratio_std": 0.02560095521348236,
+      "n_seeds": 4
+    }
+  }
+}
